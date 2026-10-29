@@ -144,6 +144,7 @@
   "settings_notifications_invalid_repeat_step": "Invalid repeat step. Use a value in range 0.01..500.",
   "settings_notifications_invalid_cooldown": "Invalid cooldown. Use an integer in range 0..86400.",
   "settings_notifications_saved": "{{field}} updated: {{value}}",
+  "export_pk_warning_title": "SECURITY WARNING: EXPORT PRIVATE KEY",
   "export_pk_warning": "?? SECURITY WARNING\n\nThis will display your private key. Anyone who sees it can steal your funds.\n\nExport and store it securely: reinstalling OS or moving to another device may cause wallet access loss.\n\nContinue?",
   "export_pk_confirm": "Yes, Continue",
   "export_pk_cancel": "Cancel",

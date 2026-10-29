@@ -387,8 +387,13 @@ export function createSecurityFeature(deps) {
       state: 'AWAITING_EXPORT_CONFIRMATION'
     });
 
+    const warningTitle = t('export_pk_warning_title');
+    const displayTitle = (!warningTitle || warningTitle === 'export_pk_warning_title')
+      ? 'SECURITY WARNING: EXPORT PRIVATE KEY'
+      : warningTitle;
+
     const text =
-      `⚠️ <b>${t('export_pk_warning_title') || 'EXPORT PRIVATE KEY WARNING'}</b>\n\n` +
+      `⚠️ <b>${displayTitle}</b>\n\n` +
       `Never share your private key with anyone! Anyone with your private key has complete control of all funds.\n\n` +
       `👉 <b>Tap the button below to confirm export:</b>`;
 

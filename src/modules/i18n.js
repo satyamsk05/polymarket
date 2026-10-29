@@ -32,12 +32,13 @@ async function loadLocale(lang) {
   }
 }
 
-// Get translation function for a language
-export async function getTranslator(lang) {
-  const locale = await loadLocale(lang);
+// Get translation function for a language (strictly English)
+export async function getTranslator(lang = 'en') {
+  // Always enforce English across the entire bot
+  const locale = await loadLocale('en');
   
   return function t(key, replacements = {}) {
-    let text = locale[key] || locales['en']?.[key] || key;
+    let text = locale[key] || key;
     
     // Replace placeholders like {{name}}
     for (const [placeholder, value] of Object.entries(replacements)) {
