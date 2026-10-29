@@ -169,7 +169,7 @@ async function showStrategySplitConfirmation(ctx, state, amountBase, t, useEdit 
 
 async function startStrategyFlowFromMarket(ctx, marketRef) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
 
   let market;
@@ -242,7 +242,7 @@ async function startStrategyFlowFromMarket(ctx, marketRef) {
 
 async function handleStrategySplitAmount(ctx, state, text) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
 
   let amountBase;
   try {
@@ -285,7 +285,7 @@ async function handleStrategySplitAmount(ctx, state, text) {
 
 async function handleStrategySplitPercent(ctx, percent) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   const state = userStates.get(chatId);
 
@@ -299,7 +299,7 @@ async function handleStrategySplitPercent(ctx, percent) {
     Number.isNaN(percent)
   ) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     userStates.delete(chatId);
     return;
@@ -354,7 +354,7 @@ async function handleStrategySplitPercent(ctx, percent) {
     safeLogError(ctxLog, error, { percent });
     const errorInfo = mapErrorToUserMessage(error);
     await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     userStates.delete(chatId);
   } finally {
@@ -364,7 +364,7 @@ async function handleStrategySplitPercent(ctx, percent) {
 
 async function executeConfirmedStrategySplit(ctx) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   const state = userStates.get(chatId);
 
@@ -378,7 +378,7 @@ async function executeConfirmedStrategySplit(ctx) {
     !state.amountBase
   ) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     return;
   }
@@ -388,14 +388,14 @@ async function executeConfirmedStrategySplit(ctx) {
     amountBase = BigInt(state.amountBase?.toString?.() ?? state.amountBase);
   } catch {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     return;
   }
 
   if (amountBase <= 0n) {
     await ctx.editMessageText(t('error_invalid_amount'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     return;
   }
@@ -406,7 +406,7 @@ async function executeConfirmedStrategySplit(ctx) {
         amount: formatUSDCFromBase(amountBase),
         min: formatUSDCFromBase(MIN_SPLIT_USDC_BASE)
       }),
-      { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+      { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
     );
     return;
   }
@@ -414,7 +414,7 @@ async function executeConfirmedStrategySplit(ctx) {
   if (amountBase < MIN_LIMIT_ORDER_SHARES_BASE) {
     await ctx.editMessageText(
       t('limit_min_size', { min: formatSharesFromBase(MIN_LIMIT_ORDER_SHARES_BASE) }),
-      { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+      { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
     );
     return;
   }
@@ -550,7 +550,7 @@ async function executeConfirmedStrategySplit(ctx) {
     await ctx.editMessageText(
       `${escapeHtml(strategyMessage)}\nSplit tx: ${splitTxLabel}`,
       {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru'),
+        reply_markup: await getMainMenuKeyboard(config.language || 'en'),
         parse_mode: 'HTML'
       }
     );
@@ -582,14 +582,14 @@ async function executeConfirmedStrategySplit(ctx) {
       await ctx.editMessageText(
         t('error_order_failed', { message }),
         {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru'),
+          reply_markup: await getMainMenuKeyboard(config.language || 'en'),
           parse_mode: 'HTML'
         }
       );
     } else {
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
     }
   } finally {
@@ -600,7 +600,7 @@ async function executeConfirmedStrategySplit(ctx) {
 
 async function startSplitFlow(ctx, marketRef) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   
   // Get market details
@@ -670,7 +670,7 @@ async function startSplitFlow(ctx, marketRef) {
 
 async function handleSplitAmount(ctx, state, text) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   
   // Parse USDC amount from string input (handles "15.2" or "15,2")
   let amountBase;
@@ -708,7 +708,7 @@ async function handleSplitAmount(ctx, state, text) {
 
 async function handleSplitPercent(ctx, percent) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   const state = userStates.get(chatId);
 
@@ -720,7 +720,7 @@ async function handleSplitPercent(ctx, percent) {
     Number.isNaN(percent)
   ) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     userStates.delete(chatId);
     return;
@@ -764,7 +764,7 @@ async function handleSplitPercent(ctx, percent) {
     safeLogError(ctxLog, error, { slug: state.slug, conditionId: state.conditionId, percent });
     const errorInfo = mapErrorToUserMessage(error);
     await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     userStates.delete(chatId);
   } finally {
@@ -774,13 +774,13 @@ async function handleSplitPercent(ctx, percent) {
 
 async function executeConfirmedSplit(ctx) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   const state = userStates.get(chatId);
   
   if (!state || !state.amountBase || !state.conditionId) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     return;
   }
@@ -797,7 +797,7 @@ async function executeConfirmedSplit(ctx) {
           amount: formatUSDCFromBase(state.amountBase),
           min: formatUSDCFromBase(MIN_SPLIT_USDC_BASE)
         }),
-        { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+        { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
       );
       return;
     }
@@ -823,14 +823,14 @@ async function executeConfirmedSplit(ctx) {
       await ctx.editMessageText(
         t('split_success', { hash: txLabel, amount: formatUSDCFromBase(state.amountBase) }),
         {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru'),
+          reply_markup: await getMainMenuKeyboard(config.language || 'en'),
           parse_mode: 'HTML'
         }
       );
     } else {
       await ctx.editMessageText(
         t('error_order_failed', { message: getResultErrorMessage(result, t) }),
-        { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+        { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
       );
     }
   } catch (error) {
@@ -838,7 +838,7 @@ async function executeConfirmedSplit(ctx) {
     safeLogError(ctxLog, error, { state, amountBase: state.amountBase?.toString() });
     const errorInfo = mapErrorToUserMessage(error);
     await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
   } finally {
     userStates.delete(chatId);
@@ -848,7 +848,7 @@ async function executeConfirmedSplit(ctx) {
 
 async function startMergeFlow(ctx, marketRef) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   
   // Get market details
@@ -937,7 +937,7 @@ async function startMergeFlow(ctx, marketRef) {
 
 async function handleMergeAmount(ctx, state, text) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   
   // Parse shares amount from string input (handles "15.2" or "15,2")
@@ -992,7 +992,7 @@ async function handleMergeAmount(ctx, state, text) {
 
 async function handleMergeMax(ctx) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   const state = userStates.get(chatId);
 
@@ -1001,7 +1001,7 @@ async function handleMergeMax(ctx) {
     state.state !== 'AWAITING_MERGE_AMOUNT'
   ) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     userStates.delete(chatId);
     return;
@@ -1037,13 +1037,13 @@ async function handleMergeMax(ctx) {
 
 async function executeConfirmedMerge(ctx) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
   const state = userStates.get(chatId);
   
   if (!state || !state.sharesBase || !state.conditionId) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     return;
   }
@@ -1067,7 +1067,7 @@ async function executeConfirmedMerge(ctx) {
       if (!livePosition) {
         await ctx.editMessageText(
           t('error_order_failed', { message: 'Merge is unavailable: position is no longer present' }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
         );
         return;
       }
@@ -1076,7 +1076,7 @@ async function executeConfirmedMerge(ctx) {
       if (!liveMergeInfo.available || liveMergeInfo.maxMergeBase <= 0n) {
         await ctx.editMessageText(
           t('error_order_failed', { message: 'Merge is unavailable: opposite side balance is insufficient' }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
         );
         return;
       }
@@ -1085,7 +1085,7 @@ async function executeConfirmedMerge(ctx) {
         const maxLabel = formatSharesFromBase(liveMergeInfo.maxMergeBase);
         await ctx.editMessageText(
           t('error_order_failed', { message: `Merge amount exceeds available pair balance (max ${maxLabel} shares)` }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
         );
         return;
       }
@@ -1113,14 +1113,14 @@ async function executeConfirmedMerge(ctx) {
       await ctx.editMessageText(
         t('merge_success', { hash: txLabel, amount: formatSharesFromBase(state.sharesBase) }),
         {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru'),
+          reply_markup: await getMainMenuKeyboard(config.language || 'en'),
           parse_mode: 'HTML'
         }
       );
     } else {
       await ctx.editMessageText(
         t('error_order_failed', { message: getResultErrorMessage(result, t) }),
-        { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+        { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
       );
     }
   } catch (error) {
@@ -1128,7 +1128,7 @@ async function executeConfirmedMerge(ctx) {
     safeLogError(ctxLog, error, { state, sharesBase: state.sharesBase?.toString() });
     const errorInfo = mapErrorToUserMessage(error);
     await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
   } finally {
     userStates.delete(chatId);
@@ -1138,14 +1138,14 @@ async function executeConfirmedMerge(ctx) {
 
 async function executeConfirmedRedeem(ctx) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const chatId = ctx.chat.id;
-  const language = config.language || 'ru';
+  const language = config.language || 'en';
   const state = userStates.get(chatId);
 
   if (!state || state.state !== 'CONFIRMING_REDEEM' || !state.conditionId) {
     await ctx.editMessageText(t('error_generic'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
     return;
   }
@@ -1163,7 +1163,7 @@ async function executeConfirmedRedeem(ctx) {
     if (!isSuccess) {
       await ctx.editMessageText(
         t('error_order_failed', { message: getResultErrorMessage(result, t) }),
-        { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+        { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
       );
       return;
     }
@@ -1186,7 +1186,7 @@ async function executeConfirmedRedeem(ctx) {
     safeLogError(ctxLog, error, { conditionId: state?.conditionId });
     const errorInfo = mapErrorToUserMessage(error);
     await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+      reply_markup: await getMainMenuKeyboard(config.language || 'en')
     });
   } finally {
     userStates.delete(chatId);

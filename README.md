@@ -15,7 +15,7 @@ Single-user Telegram bot for trading on Polymarket (Polygon), with market/limit 
 - Positions, orders, and strategies views in Telegram
 - Background workers for position sync, order reconciliation, price alerts, and strategy monitoring
 - Strategy market alerts: watcher scans active markets and notifies when YES ask and NO ask are both below strategy max ask
-- English/Russian UI, with optional RU AI label translation via OpenRouter
+- English UI
 - Sensitive data redaction in logs and patched `console.*`
 
 ## Requirements
@@ -227,7 +227,7 @@ See [Secure Device Migration (No Bot Import)](#secure-device-migration-no-bot-im
 ## First-Time Setup in Bot
 
 1. Send `/start`.
-2. Select language (EN/RU).
+2. Select language (English).
 3. Open `Settings -> Initialize Wallet`.
 4. Fund generated wallet with pUSD on Polygon, or send USDC.e and convert it via `Settings -> Wrap USDC.e → pUSD`.
 5. Open `Settings -> Set Allowances`.

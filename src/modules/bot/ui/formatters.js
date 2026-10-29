@@ -1,4 +1,4 @@
-﻿import { formatPriceFromMicro, parsePriceToMicro } from '../../polymarket.js';
+import { formatPriceFromMicro, parsePriceToMicro } from '../../polymarket.js';
 
 export function toUnitIntervalOrNull(value) {
   const number = Number(value);
@@ -36,11 +36,11 @@ export function normalizeOutcomeSideHint(value) {
   const normalized = String(value ?? '').trim().toUpperCase();
   if (!normalized) return null;
 
-  if (normalized === 'YES' || normalized === 'Y' || normalized === 'UP' || normalized === '1' || normalized === 'ДА') {
+  if (normalized === 'YES' || normalized === 'Y' || normalized === 'UP' || normalized === '1') {
     return 'YES';
   }
 
-  if (normalized === 'NO' || normalized === 'N' || normalized === 'DOWN' || normalized === '0' || normalized === 'НЕТ') {
+  if (normalized === 'NO' || normalized === 'N' || normalized === 'DOWN' || normalized === '0') {
     return 'NO';
   }
 
@@ -48,7 +48,7 @@ export function normalizeOutcomeSideHint(value) {
 }
 
 export function getRedeemActionLabel(language) {
-  return String(language || 'ru').toLowerCase() === 'ru' ? 'Погасить' : 'Redeem';
+  return 'Redeem';
 }
 
 export function formatOrderPriceDisplay(priceNumber, t) {

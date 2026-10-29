@@ -34,6 +34,18 @@ export function initDatabase() {
 }
 
 function createTables() {
+  // Users table (multi-user support up to 10 users)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      telegram_id TEXT PRIMARY KEY,
+      wallet_address TEXT NOT NULL,
+      encrypted_pk TEXT NOT NULL,
+      encrypted_creds TEXT,
+      language TEXT DEFAULT 'en',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Markets cache (for conditionId lookup)
   db.exec(`
     CREATE TABLE IF NOT EXISTS markets (
@@ -670,4 +682,39 @@ export async function saveTranslation(marketId, language, originalName, translat
 export async function getTranslation(marketId, language) {
   const stmt = db.prepare('SELECT * FROM market_translations WHERE market_id = ? AND language = ?');
   return stmt.get(marketId, language);
+}
+
+// Multi-user management (max 10 users)
+export function getUserByTelegramId(telegramId) {
+  if (!db) return null;
+  const stmt = db.prepare('SELECT * FROM users WHERE telegram_id = ?');
+  return stmt.get(String(telegramId));
+}
+
+export function getAllUsers() {
+  if (!db) return [];
+  const stmt = db.prepare('SELECT * FROM users ORDER BY created_at ASC');
+  return stmt.all();
+}
+
+export function getUserCount() {
+  if (!db) return 0;
+  const stmt = db.prepare('SELECT COUNT(*) as count FROM users');
+  const res = stmt.get();
+  return res ? Number(res.count) : 0;
+}
+
+export function createUserRecord({ telegramId, walletAddress, encryptedPk, encryptedCreds, language = 'en' }) {
+  if (!db) return null;
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO users (telegram_id, wallet_address, encrypted_pk, encrypted_creds, language)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  return stmt.run(String(telegramId), walletAddress, encryptedPk, encryptedCreds, language);
+}
+
+export function updateUserLanguage(telegramId, language) {
+  if (!db) return null;
+  const stmt = db.prepare('UPDATE users SET language = ? WHERE telegram_id = ?');
+  return stmt.run(language, String(telegramId));
 }

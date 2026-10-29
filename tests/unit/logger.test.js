@@ -25,8 +25,8 @@ test('isRetryableError marks transient errors as retryable', () => {
 });
 
 test('formatError localizes common cases', () => {
-  const insufficientRu = formatError(new Error('insufficient balance'), 'ru');
-  assert.equal(insufficientRu.title, 'Недостаточно средств');
+  const insufficient = formatError(new Error('insufficient balance'));
+  assert.equal(insufficient.title, 'Insufficient funds');
   const allowanceEn = formatError(new Error('allowance too low'), 'en');
   assert.equal(allowanceEn.title, 'Insufficient allowance');
 });

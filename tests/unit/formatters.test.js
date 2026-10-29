@@ -53,6 +53,6 @@ test('formatTxHashLink formats Polygonscan link', () => {
 
 test('normalizeOutcomeSideHint recognizes YES/NO variants', () => {
   assert.equal(normalizeOutcomeSideHint('yes'), 'YES');
-  assert.equal(normalizeOutcomeSideHint('нет'), 'NO');
+  assert.equal(normalizeOutcomeSideHint('no'), 'NO');
   assert.equal(normalizeOutcomeSideHint('maybe'), null);
 });

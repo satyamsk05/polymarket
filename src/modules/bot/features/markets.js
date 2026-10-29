@@ -1,7 +1,8 @@
 import { InlineKeyboard } from 'grammy';
 import { loadConfig } from '../../config.js';
 import { getTranslator } from '../../i18n.js';
-import { getMarkets } from '../../polymarket.js';
+import { getMarkets, getEvents } from '../../polymarket.js';
+import { escapeHtml } from '../ui/formatters.js';
 import { userStates } from '../runtime.js';
 import { STRATEGY_MARKETS_PAGE_SIZE } from '../constants.js';
 
@@ -31,57 +32,105 @@ export function createMarketsFeature(deps) {
     CATEGORY_ALL_KEY
   } = deps;
 
-  // Show markets list - does NOT require initialized clobClient
+  // Show markets list - filtered exclusively for BTC & ETH 5M Up/Down markets
   async function showMarketsList(ctx, page = 1) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const chatId = ctx.chat.id;
     
     await ctx.editMessageText(t('loading'));
     
     try {
-      // getMarkets now works without initialized clobClient (uses Gamma API)
-      const marketsRaw = await getMarkets(null, page, 8);
-      const markets = sortByLiquidityDesc(marketsRaw);
-      if (!markets || markets.length === 0) {
-        await ctx.editMessageText(t('no_markets'), {
-          reply_markup: new InlineKeyboard().text(t('back'), 'back_menu')
-        });
+      // Query active 5m series with order=endDate&ascending=true
+      // This fetches the live rounds happening TODAY (ending in next 5m, 10m, 15m), NOT tomorrow!
+      const [btcEventsRaw, ethEventsRaw] = await Promise.all([
+        fetch('https://gamma-api.polymarket.com/events?series_slug=btc-up-or-down-5m&closed=false&order=endDate&ascending=true')
+          .then((r) => r.json()).catch(() => []),
+        fetch('https://gamma-api.polymarket.com/events?series_slug=eth-up-or-down-5m&closed=false&order=endDate&ascending=true')
+          .then((r) => r.json()).catch(() => [])
+      ]);
+
+      const now = Date.now();
+      const rawEvents = [
+        ...(Array.isArray(btcEventsRaw) ? btcEventsRaw : []),
+        ...(Array.isArray(ethEventsRaw) ? ethEventsRaw : [])
+      ];
+
+      const filteredEvents = rawEvents.filter((e) => {
+        const notEnded = e.endDate && new Date(e.endDate).getTime() > now;
+        return notEnded && !e.closed;
+      });
+
+      // Sort so the round ending earliest (next 2-5 mins) is right at the top
+      filteredEvents.sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+
+      const allMarkets = filteredEvents.map((e) => {
+        const sub = (Array.isArray(e.markets) && e.markets[0]) ? e.markets[0] : e;
+        return {
+          ...sub,
+          eventTitle: e.title,
+          endDate: sub.endDate || e.endDate,
+          slug: sub.slug || e.slug,
+          seriesSlug: e.seriesSlug || sub.seriesSlug
+        };
+      });
+
+      if (!allMarkets || allMarkets.length === 0) {
+        await ctx.editMessageText(
+          '⚡️ <b>BTC & ETH 5M Up/Down Markets</b>\n\nNo active 5M rounds found right now. Tap Refresh to check again.',
+          {
+            reply_markup: new InlineKeyboard().text('🔄 Refresh', 'markets:1').row().text(t('back'), 'back_menu'),
+            parse_mode: 'HTML'
+          }
+        );
         return;
       }
-      
+
+      const pageSize = 6;
+      const totalPages = Math.max(1, Math.ceil(allMarkets.length / pageSize));
+      const safePage = Math.min(Math.max(page, 1), totalPages);
+      const startIndex = (safePage - 1) * pageSize;
+      const markets = allMarkets.slice(startIndex, startIndex + pageSize);
+
       // Cache markets for this chat+page to resolve short callback tokens later
-      const cacheKey = `markets:${chatId}:${page}`;
+      const cacheKey = `markets:${chatId}:${safePage}`;
       userStates.set(cacheKey, { markets, timestamp: Date.now() });
 
-      const marketQuestions = markets.map((market) => market.question || market.title || t('unknown'));
-      const translatedQuestions = await translateUiLabelsForLanguage(
-        language,
-        marketQuestions,
-        'markets list'
-      );
-      
-      let text = t('markets_title', { page }) + '\n\n';
+      let text = `⚡️ <b>BTC & ETH 5M Up/Down Markets (Page ${safePage}/${totalPages})</b>\n\n`;
       const keyboard = new InlineKeyboard();
-      
+
       markets.forEach((market, index) => {
-        const question = translatedQuestions[index] || t('unknown');
-        const volume = market.volume ? `$${(market.volume / 1e6).toFixed(2)}M` : t('na');
-        const shortQuestion = truncateButtonLabel(question) || t('unknown');
-        text += `- ${shortQuestion}\n  ${t('volume_short')}: ${volume}\n\n`;
-        // Use short callback token: msel:<page>:<idx> for market selection
-        keyboard.text(shortQuestion, `msel:${page}:${index}`).row();
+        const title = market.eventTitle || market.question || market.title || '5M Up/Down';
+        const isBtc = /bitcoin|btc/i.test(title);
+        const isEth = /ethereum|eth/i.test(title);
+        const coinIcon = isBtc ? '🟡 BTC' : isEth ? '🔷 ETH' : '🪙 CRYPTO';
+
+        // Extract time range if present (e.g. 6:10AM-6:15AM ET)
+        const timeMatch = title.match(/(\d+:\d+[AP]M-\d+:\d+[AP]M(\s*ET)?)/i);
+        const timeLabel = timeMatch ? timeMatch[1] : '';
+
+        // Calculate minutes remaining
+        const diffMins = market.endDate ? Math.max(0, Math.round((new Date(market.endDate).getTime() - now) / 60000)) : null;
+        const minsLeftStr = diffMins !== null ? ` [⏳ ${diffMins}m left]` : '';
+
+        const btnLabel = timeLabel ? `${coinIcon} 5M (${timeLabel})${minsLeftStr}` : `${coinIcon} ${title.slice(0, 22)}${minsLeftStr}`;
+
+        text += `${startIndex + index + 1}. <b>${coinIcon} 5M:</b> ${escapeHtml(title)}${minsLeftStr}\n\n`;
+        keyboard.text(btnLabel, `msel:${safePage}:${index}`).row();
       });
-      
-      if (page > 1) {
-        keyboard.text(t('prev'), `markets:${page - 1}`);
+
+      if (safePage > 1) {
+        keyboard.text(t('prev'), `markets:${safePage - 1}`);
       }
-      keyboard.text(t('next'), `markets:${page + 1}`);
+      if (safePage < totalPages) {
+        keyboard.text(t('next'), `markets:${safePage + 1}`);
+      }
+      keyboard.text('🔄 Refresh', `markets:${safePage}`);
       keyboard.row();
       keyboard.text(t('back'), 'back_menu');
-      
-      await ctx.editMessageText(text, { reply_markup: keyboard });
+
+      await ctx.editMessageText(text, { reply_markup: keyboard, parse_mode: 'HTML' });
     } catch (error) {
       const ctxLog = createContext('bot', 'showMarketsList');
       safeLogError(ctxLog, error, { page });
@@ -93,7 +142,7 @@ export function createMarketsFeature(deps) {
 
   async function showStrategyMarketsList(ctx, page = 1, forceRefresh = false) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const chatId = ctx.chat.id;
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -185,7 +234,7 @@ export function createMarketsFeature(deps) {
 
   async function showMarketCategoriesList(ctx, page = 1) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const chatId = ctx.chat.id;
     const safePage = Number.isFinite(page) && page > 0 ? page : 1;
@@ -245,7 +294,7 @@ export function createMarketsFeature(deps) {
 
   async function showEventsFilterMenu(ctx, nav = {}) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const categoryToken = nav.categoryToken || CATEGORY_ALL_KEY;
     const eventsPage = Number.isFinite(nav.eventsPage) && nav.eventsPage > 0 ? Math.floor(nav.eventsPage) : 1;
@@ -272,7 +321,7 @@ export function createMarketsFeature(deps) {
   // Show events list - displays unique events filtered by selected category.
   async function showEventsList(ctx, options = {}) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const chatId = ctx.chat.id;
 

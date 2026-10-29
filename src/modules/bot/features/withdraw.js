@@ -4,6 +4,7 @@ import { getTranslator } from '../../i18n.js';
 import { getCollateralBalanceBase, withdrawUSDC, formatUSDCFromBase, parseUSDCToBase, mapErrorToUserMessage } from '../../polymarket.js';
 import { userStates, busyLocks } from '../runtime.js';
 import { createContext, safeLogError, safeLogWarn } from '../../logger.js';
+import { getSettingsBottomKeyboard, getWithdrawCancelKeyboard } from '../ui/keyboards.js';
 
 const WITHDRAW_PERCENT_OPTIONS = [10, 20, 30, 50];
 
@@ -36,12 +37,12 @@ export function createWithdrawFeature(deps) {
 
   async function startWithdrawFlow(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (!config.walletAddress) {
-      await ctx.editMessageText(t('error_no_wallet'), {
-        reply_markup: new InlineKeyboard().text(t('back'), 'settings')
+      await ctx.reply(t('error_no_wallet'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
       return;
     }
@@ -51,14 +52,14 @@ export function createWithdrawFeature(deps) {
       state: 'AWAITING_WITHDRAW_ADDRESS'
     });
 
-    await ctx.editMessageText(t('withdraw_prompt_address'), {
-      reply_markup: new InlineKeyboard().text(t('back'), 'settings')
+    await ctx.reply(t('withdraw_prompt_address') + '\n\n' + `👉 Please enter the Polygon recipient address or cancel below:`, {
+      reply_markup: getWithdrawCancelKeyboard()
     });
   }
 
   async function handleWithdrawAddress(ctx, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const address = text.trim();
@@ -101,13 +102,13 @@ export function createWithdrawFeature(deps) {
 
   async function handleWithdrawAmount(ctx, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const state = userStates.get(chatId);
     if (!state || state.state !== 'AWAITING_WITHDRAW_AMOUNT' || !state.withdrawAddress) {
       await ctx.reply(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -143,13 +144,13 @@ export function createWithdrawFeature(deps) {
 
   async function handleWithdrawPercent(ctx, percent) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const state = userStates.get(chatId);
     if (!state || state.state !== 'AWAITING_WITHDRAW_AMOUNT' || !state.withdrawAddress) {
       await ctx.reply(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -214,13 +215,13 @@ export function createWithdrawFeature(deps) {
 
   async function executeWithdraw(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const state = userStates.get(chatId);
     if (!state || state.state !== 'CONFIRMING_WITHDRAW' || !state.withdrawAddress || !state.withdrawAmountBase) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -242,12 +243,12 @@ export function createWithdrawFeature(deps) {
         const txLink = formatTxHashLink ? formatTxHashLink(txHash) : txHash;
         await ctx.editMessageText(
           t('withdraw_success', { txHash: txLink }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru'), parse_mode: 'HTML' }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en'), parse_mode: 'HTML' }
         );
       } else {
         await ctx.editMessageText(
           t('withdraw_success', { txHash: 'unknown' }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru'), parse_mode: 'HTML' }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en'), parse_mode: 'HTML' }
         );
       }
     } catch (error) {
@@ -255,7 +256,7 @@ export function createWithdrawFeature(deps) {
       safeLogError(ctxLog, error, { address, amountBase: amountBase.toString() });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
     } finally {
       userStates.delete(chatId);

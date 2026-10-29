@@ -23,6 +23,7 @@ import {
 } from './constants.js';
 import { safeLogError, safeLogWarn, safeLogInfo, createContext, normalizeNumericInput } from './logger.js';
 import { getCachedMarkets } from './database.js';
+import { getCurrentUserStore } from './userManager.js';
 
 // ============================================================================
 // Part A: CLOB Operations (via SDK)
@@ -30,6 +31,16 @@ import { getCachedMarkets } from './database.js';
 
 let clobClient = null;
 let clobUserAddress = null;
+
+export function getEffectiveClobClient() {
+  try {
+    const store = getCurrentUserStore();
+    if (store && store.clobClient) {
+      return store.clobClient;
+    }
+  } catch {}
+  return clobClient;
+}
 let onchainReadProvider = null;
 const onchainPositionsCache = new Map();
 const onchainConditionMarketCache = new Map();
@@ -288,13 +299,29 @@ export async function getMarketDetails(marketRef) {
   const id = isObjectRef ? marketRef.id : marketRef;
   const isNumericRef = typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
 
-  // If caller passed an object with slug, prefer slug first.
+  // If caller passed an object with a numeric ID, try ID first (avoids ephemeral slug ECONNRESET).
+  if (isObjectRef && isNumericRef) {
+    try {
+      return await getMarketDetailsById(id);
+    } catch (idError) {
+      if (slug) {
+        try {
+          return await getMarketDetailsBySlug(slug);
+        } catch (_) {}
+      }
+      throw idError;
+    }
+  }
+
+  // If caller passed an object with slug, try slug with ID fallback.
   if (isObjectRef && slug) {
     try {
       return await getMarketDetailsBySlug(slug);
     } catch (slugError) {
-      if (slugError.status !== 404 || !isNumericRef) throw slugError;
-      return getMarketDetailsById(id);
+      if (isNumericRef) {
+        return getMarketDetailsById(id);
+      }
+      throw slugError;
     }
   }
 
@@ -453,11 +480,12 @@ export function filterTradeableSubmarkets(event) {
 
 // Get orderbook for token - REQUIRES clobClient
 export async function getOrderBook(tokenId) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
   
-  return await clobClient.getOrderBook(tokenId);
+  return await client.getOrderBook(tokenId);
 }
 
 // Get best bid/ask from orderbook - REQUIRES clobClient
@@ -1497,7 +1525,7 @@ function chunkArray(values, size) {
   return chunks;
 }
 
-async function getOnchainReadProvider() {
+export async function getOnchainReadProvider() {
   if (provider) return provider;
   if (onchainReadProvider) return onchainReadProvider;
   onchainReadProvider = await createWorkingProvider(getPolygonRpcUrl());
@@ -1690,11 +1718,12 @@ async function getOnchainPositionsFromExplorer(address, options = {}) {
 
 // Get user positions - REQUIRES clobClient
 export async function getPositions(userAddress, options = {}) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
 
-  const address = (userAddress || clobUserAddress || clobClient?.signer?.address || '').toLowerCase();
+  const address = (userAddress || client?.signer?.address || clobUserAddress || '').toLowerCase();
   if (!address) {
     throw new Error('Wallet address is required to fetch positions');
   }
@@ -1753,15 +1782,16 @@ export async function getPositions(userAddress, options = {}) {
 
 // Get user orders - REQUIRES clobClient
 export async function getOrders(address) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
 
-  const walletAddress = (address || clobUserAddress || '').toLowerCase();
+  const walletAddress = (address || client?.signer?.address || clobUserAddress || '').toLowerCase();
   let list = [];
 
   try {
-    const raw = await clobClient.getOpenOrders();
+    const raw = await client.getOpenOrders();
     list = Array.isArray(raw)
       ? raw
       : Array.isArray(raw?.data)
@@ -1814,18 +1844,20 @@ function normalizeOpenOrdersPage(payload) {
 }
 
 async function getL2HeaderTimestamp() {
-  if (!clobClient?.useServerTime || typeof clobClient?.getServerTime !== 'function') {
+  const client = getEffectiveClobClient();
+  if (!client?.useServerTime || typeof client?.getServerTime !== 'function') {
     return undefined;
   }
   try {
-    return await clobClient.getServerTime();
+    return await client.getServerTime();
   } catch {
     return undefined;
   }
 }
 
 async function fetchOpenOrdersPageViaHttp(endpoint, walletAddress, nextCursor, includeUserParam = true) {
-  if (!clobClient?.signer || !clobClient?.creds) {
+  const client = getEffectiveClobClient();
+  if (!client?.signer || !client?.creds) {
     throw new Error('HTTP fallback requires signer and L2 credentials');
   }
 
@@ -1836,8 +1868,8 @@ async function fetchOpenOrdersPageViaHttp(endpoint, walletAddress, nextCursor, i
   };
 
   const headers = await createL2Headers(
-    clobClient.signer,
-    clobClient.creds,
+    client.signer,
+    client.creds,
     headerArgs,
     await getL2HeaderTimestamp()
   );
@@ -1902,12 +1934,14 @@ async function getOpenOrdersViaHttpFallback(walletAddress) {
 
 // Check if createAndPostMarketOrder is available in SDK
 function hasMarketOrderSupport() {
-  return clobClient && typeof clobClient.createAndPostMarketOrder === 'function';
+  const client = getEffectiveClobClient();
+  return client && typeof client.createAndPostMarketOrder === 'function';
 }
 
 // Ask CLOB backend to refresh cached balance/allowance view from chain.
 async function refreshClobBalanceAllowance(assetType, tokenId) {
-  if (!clobClient || typeof clobClient.updateBalanceAllowance !== 'function') {
+  const client = getEffectiveClobClient();
+  if (!client || typeof client.updateBalanceAllowance !== 'function') {
     return;
   }
   try {
@@ -1916,7 +1950,7 @@ async function refreshClobBalanceAllowance(assetType, tokenId) {
     if (assetType !== AssetType.COLLATERAL && tokenId) {
       params.token_id = tokenId;
     }
-    await clobClient.updateBalanceAllowance(params);
+    await client.updateBalanceAllowance(params);
   } catch (error) {
     const ctx = createContext('polymarket', 'refreshClobBalanceAllowance');
     safeLogWarn(ctx, 'Failed to refresh CLOB balance/allowance cache', {
@@ -1940,7 +1974,8 @@ function safeToBigInt(value) {
 // Returns { balance, allowance } as strings in base units (bigint-safe)
 // ============================================================================
 export async function getCollateralStatus() {
-  if (!clobClient || typeof clobClient.getBalanceAllowance !== 'function') {
+  const client = getEffectiveClobClient();
+  if (!client || typeof client.getBalanceAllowance !== 'function') {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
 
@@ -1948,7 +1983,7 @@ export async function getCollateralStatus() {
   await refreshClobBalanceAllowance(AssetType.COLLATERAL, null);
 
   // COLLATERAL must NOT have token_id parameter
-  const data = await clobClient.getBalanceAllowance({
+  const data = await client.getBalanceAllowance({
     asset_type: AssetType.COLLATERAL
   });
 
@@ -2003,7 +2038,8 @@ export async function getCollateralBalanceBase() {
 }
 
 async function ensureClobCollateralReady(amountUSDCBase) {
-  if (!clobClient || typeof clobClient.getBalanceAllowance !== 'function') {
+  const client = getEffectiveClobClient();
+  if (!client || typeof client.getBalanceAllowance !== 'function') {
     return;
   }
 
@@ -2122,9 +2158,10 @@ function normalizeTickSizeForSdk(rawTickSize) {
 }
 
 async function resolveOrderOptions(tokenId) {
-  const rawTickSize = await clobClient.getTickSize(tokenId);
+  const client = getEffectiveClobClient();
+  const rawTickSize = await client.getTickSize(tokenId);
   const tickSize = normalizeTickSizeForSdk(rawTickSize);
-  const negRisk = await clobClient.getNegRisk(tokenId);
+  const negRisk = await client.getNegRisk(tokenId);
 
   return { tickSize, negRisk, rawTickSize };
 }
@@ -2325,7 +2362,8 @@ async function reconcileOrderAfterAmbiguousFailure(criteria, existingMatchingIds
 // amountUSDC: dollar amount to spend (display string/number) OR bigint base units
 // Returns: { orderId, takingAmount, makingAmount, status, transactionsHashes, success }
 export async function placeMarketBuyFOK(tokenId, amountUSDC) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
   
@@ -2377,7 +2415,7 @@ export async function placeMarketBuyFOK(tokenId, amountUSDC) {
       
       if (hasMarketOrderSupport()) {
         // Use createAndPostMarketOrder if available
-        result = await clobClient.createAndPostMarketOrder(
+        result = await client.createAndPostMarketOrder(
           {
             tokenID: tokenId,
             side: Side.BUY,
@@ -2395,7 +2433,7 @@ export async function placeMarketBuyFOK(tokenId, amountUSDC) {
         const sharesDisplay = formatSharesFromBase(sharesBase);
         const sharesNum = toSdkNumber(sharesDisplay, 'size');
         
-        result = await clobClient.createAndPostOrder(
+        result = await client.createAndPostOrder(
           {
             tokenID: tokenId,
             side: Side.BUY,
@@ -2462,7 +2500,8 @@ export async function placeMarketBuyFOK(tokenId, amountUSDC) {
 // sizeShares: shares to sell (display string/number) OR bigint base units
 // Returns: { orderId, takingAmount, makingAmount, status, transactionsHashes, success }
 export async function placeMarketSellFOK(tokenId, sizeShares) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
   
@@ -2513,7 +2552,7 @@ export async function placeMarketSellFOK(tokenId, sizeShares) {
       if (hasMarketOrderSupport()) {
         // Use createAndPostMarketOrder if available
         // For SELL: amount = shares to sell
-        result = await clobClient.createAndPostMarketOrder(
+        result = await client.createAndPostMarketOrder(
           {
             tokenID: tokenId,
             side: Side.SELL,
@@ -2525,7 +2564,7 @@ export async function placeMarketSellFOK(tokenId, sizeShares) {
         );
       } else {
         // Fallback: use createAndPostOrder with FOK and marketable limit price
-        result = await clobClient.createAndPostOrder(
+        result = await client.createAndPostOrder(
           {
             tokenID: tokenId,
             side: Side.SELL,
@@ -2624,7 +2663,8 @@ export async function placeMarketSellWithFallback(tokenId, sizeShares, options =
 
 // Legacy createOrder for limit orders (GTC) - Phase 3
 export async function createOrder(params) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
   
@@ -2692,7 +2732,7 @@ export async function createOrder(params) {
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     attemptsMade = attempt + 1;
     try {
-      const order = await clobClient.createAndPostOrder(
+      const order = await client.createAndPostOrder(
         {
           tokenID: normalizedTokenId,
           price: normalizedPriceNum,
@@ -2772,23 +2812,25 @@ export async function createOrder(params) {
 
 // Cancel order - REQUIRES clobClient
 export async function cancelOrder(orderId) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
   
-  return await clobClient.cancelOrder({ orderID: orderId });
+  return await client.cancelOrder({ orderID: orderId });
 }
 
 // Check USDC balance - REQUIRES clobClient
 export async function checkBalance(address) {
-  if (!clobClient) {
+  const client = getEffectiveClobClient();
+  if (!client) {
     throw new Error('CLOB client not initialized. Call initClient() first.');
   }
 
   void address;
 
   await refreshClobBalanceAllowance(AssetType.COLLATERAL, null);
-  const data = await clobClient.getBalanceAllowance({
+  const data = await client.getBalanceAllowance({
     asset_type: AssetType.COLLATERAL
   });
 
@@ -3510,12 +3552,13 @@ export async function setAllAllowances(signer) {
   }
 
   // After setting on-chain allowances, refresh CLOB collateral allowance
-  if (clobClient) {
+  const client = getEffectiveClobClient();
+  if (client) {
     try {
       const ctx = createContext('polymarket', 'setAllAllowances');
       safeLogInfo(ctx, 'Refreshing CLOB collateral allowance');
-      await clobClient.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
-      const clobCollateral = await clobClient.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+      await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+      const clobCollateral = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
       safeLogInfo(ctx, 'CLOB collateral status after refresh', {
         balance: clobCollateral?.balance || '0',
         allowance: clobCollateral?.allowance || '0'
@@ -3565,7 +3608,7 @@ export async function getOnchainAllowancesUSDC(owner) {
   return results;
 }
 
-// Split: USDC в†’ YES + NO
+// Split: USDC -> YES + NO
 // amountUSDCBase: bigint amount in micro USDC (use parseUSDCToBase)
 // conditionId: bytes32 condition ID from market
 // Returns: transaction receipt with hash
@@ -3615,7 +3658,7 @@ async function getSignerAddress(signer) {
   throw new Error('Signer has no address: provide a Wallet/Signer with getAddress()');
 }
 
-// Merge: YES + NO в†’ USDC
+// Merge: YES + NO -> USDC
 // sharesBase: bigint amount of shares in base units (use parseSharesToBase)
 // conditionId: bytes32 condition ID from market
 // Returns: transaction receipt with hash
@@ -3680,7 +3723,7 @@ export async function merge(conditionId, sharesBase, options = {}) {
   );
 }
 
-// Redeem: winning tokens в†’ USDC (outcome determined from Gamma API)
+// Redeem: winning tokens -> USDC (outcome determined from Gamma API)
 export async function redeem(conditionId) {
   if (!ctfContract) {
     throw new Error('Contracts not initialized. Call initContracts() first.');

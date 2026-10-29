@@ -3,6 +3,7 @@ import { loadConfig, updateConfig } from '../../config.js';
 import { getTranslator } from '../../i18n.js';
 import { userStates } from '../runtime.js';
 import { CATEGORY_ALL_KEY } from '../constants.js';
+import { getSettingsBottomKeyboard } from '../ui/keyboards.js';
 
 export function createSettingsFeature(deps) {
   const {
@@ -30,65 +31,31 @@ export function createSettingsFeature(deps) {
   // Show settings
   async function showSettings(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const walletStatus = config.walletAddress ? config.walletAddress : t('not_configured');
-    const languageDisplay = config.language === 'en' ? '🇬🇧 English' : '🇷🇺 Русский';
-    const stopLoss = Number(config?.strategies?.stopLoss ?? -10);
-    const takeProfit = Number(config?.strategies?.takeProfit ?? 30);
-    const maxAskPrice = resolveStrategyMaxAskPrice(config);
-    const priceChangePercent = Number(config?.notifications?.priceChangePercent ?? 10);
-    const priceRepeatStepPercent = Number(config?.notifications?.priceRepeatStepPercent ?? 2);
-    const alertCooldownSeconds = resolveNotificationAlertCooldownSeconds(config);
-    const backupWarningLine = config.walletAddress ? `${t('settings_backup_warning')}\n` : '';
+    const languageDisplay = '🇬🇧 English';
+    const backupWarningLine = config.walletAddress ? `${t('settings_backup_warning')}\n\n` : '';
 
     const text =
-      `${t('settings_title')}\n\n` +
-      `${t('settings_wallet')}: ${walletStatus}\n` +
+      `⚙️ <b>${t('settings_title')}</b>\n\n` +
+      `<b>${t('settings_wallet')}</b>: <code>${walletStatus}</code>\n` +
+      `<b>${t('settings_language')}</b>: ${languageDisplay}\n\n` +
       backupWarningLine +
-      `${t('settings_language')}: ${languageDisplay}\n` +
-      `${t('settings_strategy_stop_loss')}: ${formatSignedPercentValue(stopLoss)}%\n` +
-      `${t('settings_strategy_take_profit')}: ${formatSignedPercentValue(takeProfit)}%\n` +
-      `${t('settings_strategy_max_ask')}: ${formatStrategyAskPrice(maxAskPrice)}\n` +
-      `${t('settings_notifications_price_change')}: ${formatPlainNumber(priceChangePercent)}%\n` +
-      `${t('settings_notifications_repeat_step')}: ${formatPlainNumber(priceRepeatStepPercent)}%\n` +
-      `${t('settings_notifications_cooldown')}: ${formatPlainNumber(alertCooldownSeconds)}s`;
+      `👉 <b>Select an action from the options below:</b>`;
 
-    const currentState = userStates.get(chatId);
-    if (
-      currentState?.state === 'AWAITING_STRATEGY_STOP_LOSS' ||
-      currentState?.state === 'AWAITING_STRATEGY_TAKE_PROFIT' ||
-      currentState?.state === 'AWAITING_STRATEGY_MAX_ASK_PRICE' ||
-      currentState?.state === 'AWAITING_NOTIFICATION_PRICE_CHANGE' ||
-      currentState?.state === 'AWAITING_NOTIFICATION_REPEAT_STEP' ||
-      currentState?.state === 'AWAITING_NOTIFICATION_COOLDOWN'
-    ) {
-      userStates.delete(chatId);
-    }
+    userStates.delete(chatId);
 
-    const keyboard = new InlineKeyboard();
-    keyboard.text(t('settings_language'), 'change_language').row();
-    keyboard.text(t('settings_strategy'), 'settings_strategy').row();
-    keyboard.text(t('settings_notifications'), 'settings_notifications').row();
-
-    if (!config.walletAddress) {
-      keyboard.text(t('settings_init_wallet'), 'init_wallet').row();
-    } else {
-      keyboard.text(t('settings_set_allowances'), 'set_allowances').row();
-      keyboard.text(t('settings_collateral_status'), 'collateral_status').row();
-      keyboard.text(t('settings_wrap_usdce'), 'wrap_usdce_all').row();
-      keyboard.text(t('settings_export_pk'), 'start_export_pk').row();
-      keyboard.text(t('settings_withdraw'), 'start_withdraw').row();
-    }
-
-    keyboard.text(t('back'), 'back_menu');
-    await ctx.editMessageText(text, { reply_markup: keyboard });
+    await ctx.reply(text, {
+      reply_markup: getSettingsBottomKeyboard(),
+      parse_mode: 'HTML'
+    });
   }
 
   async function showStrategySettings(ctx, useEdit = true) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const stopLoss = Number(config?.strategies?.stopLoss ?? -10);
     const takeProfit = Number(config?.strategies?.takeProfit ?? 30);
@@ -127,7 +94,7 @@ export function createSettingsFeature(deps) {
 
   async function showNotificationSettings(ctx, useEdit = true) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const priceChangePercent = Number(config?.notifications?.priceChangePercent ?? 10);
     const priceRepeatStepPercent = Number(config?.notifications?.priceRepeatStepPercent ?? 2);
@@ -166,7 +133,7 @@ export function createSettingsFeature(deps) {
 
   async function startStrategySettingsEdit(ctx, field) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const isStopLoss = field === 'stopLoss';
     const isTakeProfit = field === 'takeProfit';
@@ -209,7 +176,7 @@ export function createSettingsFeature(deps) {
   }
 
   async function handleStrategySettingsInput(ctx, state, text) {
-    const t = await getTranslator((await loadConfig()).language || 'ru');
+    const t = await getTranslator((await loadConfig()).language || 'en');
     const chatId = ctx.chat.id;
     const mode = state.state;
 
@@ -275,7 +242,7 @@ export function createSettingsFeature(deps) {
 
   async function startNotificationSettingsEdit(ctx, field) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const isPriceChange = field === 'priceChangePercent';
     const isRepeatStep = field === 'priceRepeatStepPercent';
@@ -305,7 +272,7 @@ export function createSettingsFeature(deps) {
   }
 
   async function handleNotificationSettingsInput(ctx, state, text) {
-    const t = await getTranslator((await loadConfig()).language || 'ru');
+    const t = await getTranslator((await loadConfig()).language || 'en');
     const chatId = ctx.chat.id;
     const isPriceChange = state.state === 'AWAITING_NOTIFICATION_PRICE_CHANGE';
     const isRepeatStep = state.state === 'AWAITING_NOTIFICATION_REPEAT_STEP';
@@ -366,7 +333,7 @@ export function createSettingsFeature(deps) {
 
   async function handleEventsFilterRangeInput(ctx, state, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const categoryToken = state?.categoryToken || CATEGORY_ALL_KEY;
     const eventsPage = Number.isFinite(state?.eventsPage) && state.eventsPage > 0

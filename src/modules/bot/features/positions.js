@@ -33,7 +33,7 @@ export function createPositionsFeature(deps) {
 
   async function showPositions(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const explorerApiConfigured = Boolean(String(process.env.ETHERSCAN_API_KEY || '').trim());
     
     // Check if wallet is configured
@@ -121,7 +121,7 @@ export function createPositionsFeature(deps) {
 
   async function showPositionDetailsFromCache(ctx, index) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (Number.isNaN(index) || index < 0) {
@@ -166,7 +166,7 @@ export function createPositionsFeature(deps) {
     const avgPrice = formatUsdOrNA(position.avgPrice, 4, t);
     const currentValue = formatUsdOrNA(position.currentValue, 2, t);
     const tokenIdForSell = getPositionTokenId(position);
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const redeemAvailable = canRedeemPosition(position);
     const sellAvailable = canSellPosition(position);
 
@@ -199,7 +199,7 @@ export function createPositionsFeature(deps) {
 
   async function startSellFromCachedPosition(ctx, index) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (!config.walletAddress) {
@@ -246,7 +246,7 @@ export function createPositionsFeature(deps) {
 
   async function startMergeFromCachedPosition(ctx, index) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (!config.walletAddress) {
@@ -327,9 +327,9 @@ export function createPositionsFeature(deps) {
 
   async function startRedeemFromCachedPosition(ctx, index) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
 
     if (!config.walletAddress) {
       await ctx.editMessageText(t('error_no_wallet'), {

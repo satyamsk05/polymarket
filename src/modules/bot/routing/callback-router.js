@@ -9,6 +9,7 @@ import { busyLocks, confirmationLocks, userStates } from '../runtime.js';
 export function createHandleCallbackRouter(deps) {
   const {
     handleLanguageSelection,
+    showMarketsList,
     showMarketCategoriesList,
     showStrategyMarketsList,
     getCachedStrategyMarket,
@@ -54,10 +55,10 @@ export function createHandleCallbackRouter(deps) {
     startRedeemFromCachedPosition,
     showOrderDetailsFromCache,
     showOrders,
-    showStrategies,
-    showStrategyDetailsFromCache,
-    startCloseStrategyFromCache,
-    executeConfirmedStrategyClose,
+    showQuickBet,
+    handleQuickBetAmount,
+    handleQuickBetCoin,
+    handleQuickBetExecute,
     cancelCachedOrder,
     executeConfirmedSplit,
     executeConfirmedMerge,
@@ -99,7 +100,7 @@ export function createHandleCallbackRouter(deps) {
 
     try {
       const config = await loadConfig();
-      const language = config.language || 'ru';
+      const language = config.language || 'en';
       const t = await getTranslator(language);
       let callbackAnswered = false;
       const answerCallback = async (text) => {
@@ -138,7 +139,7 @@ export function createHandleCallbackRouter(deps) {
 
       if (data.startsWith('markets:')) {
         const page = parseInt(data.split(':')[1], 10) || 1;
-        await showMarketCategoriesList(ctx, page);
+        await showMarketsList(ctx, page);
       } else if (data.startsWith('strategy_markets:')) {
         const page = parseInt(data.split(':')[1], 10) || 1;
         await showStrategyMarketsList(ctx, page, false);
@@ -461,7 +462,7 @@ export function createHandleCallbackRouter(deps) {
       } else if (data === 'cancel_confirmation') {
         userStates.delete(chatId);
         await ctx.editMessageText(t('cancelled'), {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+          reply_markup: await getMainMenuKeyboard(config.language || 'en')
         });
       } else if (data === 'positions') {
         await showPositions(ctx);
@@ -482,16 +483,17 @@ export function createHandleCallbackRouter(deps) {
         await showOrderDetailsFromCache(ctx, index);
       } else if (data === 'orders') {
         await showOrders(ctx);
-      } else if (data === 'strategies') {
-        await showStrategies(ctx);
-      } else if (data.startsWith('st:')) {
-        const index = parseInt(data.split(':')[1], 10);
-        await showStrategyDetailsFromCache(ctx, index);
-      } else if (data.startsWith('stclose:')) {
-        const index = parseInt(data.split(':')[1], 10);
-        await startCloseStrategyFromCache(ctx, index);
-      } else if (data === 'confirm_strategy_close') {
-        await executeConfirmedStrategyClose(ctx);
+      } else if (data === 'quick_bet') {
+        await showQuickBet(ctx);
+      } else if (data.startsWith('qb_amt:')) {
+        const amt = parseFloat(data.split(':')[1]);
+        await handleQuickBetAmount(ctx, amt);
+      } else if (data.startsWith('qb_coin:')) {
+        const coin = data.split(':')[1];
+        await handleQuickBetCoin(ctx, coin);
+      } else if (data.startsWith('qb_buy:')) {
+        const side = data.split(':')[1];
+        await handleQuickBetExecute(ctx, side);
       } else if (data.startsWith('oc:')) {
         const index = parseInt(data.split(':')[1], 10);
         await cancelCachedOrder(ctx, index);
@@ -548,12 +550,12 @@ export function createHandleCallbackRouter(deps) {
         await handleSettingsLanguageChange(ctx, lang);
       } else if (data === 'back_menu') {
         await ctx.editMessageText(t('main_menu'), {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+          reply_markup: await getMainMenuKeyboard(config.language || 'en')
         });
       } else if (data === 'cancel') {
         userStates.delete(chatId);
         await ctx.editMessageText(t('cancelled'), {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+          reply_markup: await getMainMenuKeyboard(config.language || 'en')
         });
       }
       } catch (error) {

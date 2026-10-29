@@ -1,23 +1,23 @@
 # AGENTS.md
 
 ## Tone
-- Пиши кратко, по делу, без воды.
-- Для этого репозитория опирайся на факты из кода, README и package scripts, не додумывай поведение биржи или бота.
+- Be concise, direct, and avoid filler.
+- Rely strictly on code, README, and package scripts; do not speculate on exchange or bot behavior.
 
 ## Project Context
-- Что это: single-user Telegram bot для автоматической торговли на Polymarket (Polygon) с market/limit orders, split/merge/redeem, стратегиями, воркерами и SQLite.
+- What it is: single-user Telegram bot for automated trading on Polymarket (Polygon) with market/limit orders, split/merge/redeem, strategies, background workers, and SQLite.
 - Runtime: Node.js `>=22.22.0`, ESM (`"type": "module"`).
-- Главный entrypoint: `src/index.js`.
-- Основные внешние зависимости: `grammy`, `ethers`, `@polymarket/clob-client-v2`, `better-sqlite3`, `axios`, `dotenv`, `node-cron`, `https-proxy-agent`, `node-machine-id`.
-- Репозиторий: `denis-skripnik/polymarket-trading-bot`.
+- Main entrypoint: `src/index.js`.
+- Key external dependencies: `grammy`, `ethers`, `@polymarket/clob-client-v2`, `better-sqlite3`, `axios`, `dotenv`, `node-cron`, `https-proxy-agent`, `node-machine-id`.
+- Repository: `denis-skripnik/polymarket-trading-bot`.
 
 ## Run And Validation
-- Установка зависимостей: `npm install`
-- Bootstrap sanity check без старта бота/воркеров: `npm run bootstrap`
-- Обычный запуск: `npm start`
+- Install dependencies: `npm install`
+- Bootstrap sanity check without starting bot/workers: `npm run bootstrap`
+- Standard start: `npm start`
 - Dev watch: `npm run dev`
-- Unit + integration-ish tests из репо: `npm run test`
-- Только unit tests: `npm run test:unit`
+- Unit + integration tests: `npm run test`
+- Unit tests only: `npm run test:unit`
 - PM2 prod lifecycle:
   - `npm run pm2:start`
   - `npm run pm2:restart`
@@ -30,20 +30,20 @@
   - `npm run migrate:apply -- --request <request.json> --bundle <bundle.json>`
 
 ## Config And Secrets
-- Обязательные env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID`.
-- Рекомендуемые env: `POLYGON_RPC_URL`, `ETHERSCAN_API_KEY`.
-- Прокси: `PROXY`, `OUTBOUND_HTTP_TIMEOUT_MS`.
+- Required env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID`.
+- Recommended env: `POLYGON_RPC_URL`, `ETHERSCAN_API_KEY`.
+- Proxy: `PROXY`, `OUTBOUND_HTTP_TIMEOUT_MS`.
 - Translation env: `TRANSLATION_ENABLED`, `TRANSLATION_SERVICE`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_FALLBACK_MODELS`, `OPENROUTER_BASE_URL`.
-- Worker env: `WORKER_SYNC_POSITIONS_MS`, `WORKER_MONITOR_MS`, `WORKER_HEALTH_LOG_MS`, `WORKERS_NOTIFICATIONS_CHAT_ID`.
+- Worker env: `WORKER_SYNC_POSITIONS_MS`, `WORKER_MONITOR_MS`, `WORKER_HEALTH_LOG_MS`, `WORKER_AUTO_REDEEM_MS`, `WORKERS_NOTIFICATIONS_CHAT_ID`.
 - Strategy watcher env: `STRATEGY_MARKETS_WATCHER_WS_URL`, `STRATEGY_MARKETS_WATCHER_PAGE_SIZE`, `STRATEGY_MARKETS_WATCHER_PAGES`, `STRATEGY_MARKETS_WATCHER_REFRESH_MS`, `STRATEGY_MARKETS_WATCHER_MAX_TRACKED_MARKETS`, `STRATEGY_MARKETS_WATCHER_SUBSCRIPTION_CHUNK`, `STRATEGY_MARKETS_WATCHER_WS_RECONNECT_BASE_MS`, `STRATEGY_MARKETS_WATCHER_WS_RECONNECT_MAX_MS`.
 - Gas/allowance env: `POLYGON_MIN_PRIORITY_FEE_GWEI`, `POLYGON_MIN_MAX_FEE_GWEI`, `POLYGON_APPROVE_GAS_RETRY_COUNT`, `POLYGON_APPROVE_GAS_BUMP_MULTIPLIER`, `POLYGON_MIN_USDC_ALLOWANCE_USDC`.
-- Логи: `LOG_TO_FILE`, `LOG_FILE_PATH`.
-- Не клади реальные секреты в репозиторий; шаблон только в `.env.example`.
-- По README чувствительные данные хранятся в `data/config.json`, зашифрованы ключом из machine ID.
+- Logs: `LOG_TO_FILE`, `LOG_FILE_PATH`.
+- Do not commit real secrets to the repository; template only in `.env.example`.
+- Per README, sensitive data is stored in `data/config.json`, encrypted with a key derived from machine ID.
 
 ## Data And Runtime Files
-- Runtime data directory создаётся модулем `src/modules/config.js`.
-- README описывает runtime-артефакты:
+- Runtime data directory is created by `src/modules/config.js`.
+- README describes runtime artifacts:
   - `data/config.json` — encrypted credentials + bot settings
   - `data/database.sqlite` — SQLite cache/state
   - `data/logs/app.log` — JSON logs
@@ -51,70 +51,70 @@
   - `data/migration/*` — migration request/bundle artifacts
 
 ## Architectural Boundaries
-- `src/index.js` только orchestration: env bootstrap, proxy patching, DB init, bot init/start, workers start/stop, shutdown hooks.
-- `src/modules/polymarket.js` — вся интеграция с Polymarket/Gamma/CLOB/onchain; любые изменения торговой логики, price/amount conversions, approvals, withdraw, split/merge/redeem и fallback-поведения проверять здесь и тестами.
-- `src/modules/database.js` — единственная SQLite state layer для markets, positions, orders, strategies, alerts, translations.
-- `src/modules/workers.js` — background reconciliation/monitoring lifecycle; если меняешь статус orders/strategies или алерты, смотри связанный worker.
-- `src/modules/strategyMarketWatcher.js` — отдельный WS watcher для strategy markets; не смешивай discovery/subscription logic с общим bot UI без необходимости.
+- `src/index.js` orchestration only: env bootstrap, proxy patching, DB init, bot init/start, workers start/stop, shutdown hooks.
+- `src/modules/polymarket.js` — all integration with Polymarket/Gamma/CLOB/onchain; test any changes to trading logic, price/amount conversions, approvals, withdraw, split/merge/redeem, and fallback behavior here and via tests.
+- `src/modules/database.js` — sole SQLite state layer for markets, positions, orders, strategies, alerts, translations.
+- `src/modules/workers.js` — background reconciliation/monitoring lifecycle; if modifying orders/strategies status or alerts, check the corresponding worker.
+- `src/modules/strategyMarketWatcher.js` — dedicated WS watcher for strategy markets; do not mix discovery/subscription logic with bot UI without need.
 - `src/modules/bot/` — Telegram UI/runtime/routing/features.
-- `src/modules/bot/bot.js` — большой orchestrator/legacy aggregation file; перед правками проверяй, не вынесена ли нужная логика уже в `features/*`, `routing/*`, `ui/*`, `notifications.js`, `runtime.js`.
-- `src/modules/auth.js` и migration scripts — security-sensitive зона; любые изменения требуют особой осторожности и прогонки migration/auth tests.
-- `src/modules/logger.js` и `src/modules/proxy.js` патчат глобальное поведение (`console`, fetch/provider/http paths); ломаются тонко, проверяй запуск и тесты.
+- `src/modules/bot/bot.js` — large orchestrator/legacy aggregation file; before editing, check if logic is already factored into `features/*`, `routing/*`, `ui/*`, `notifications.js`, `runtime.js`.
+- `src/modules/auth.js` and migration scripts — security-sensitive zone; changes require caution and passing migration/auth tests.
+- `src/modules/logger.js` and `src/modules/proxy.js` patch global behavior (`console`, fetch/provider/http paths); fragile, test startup and tests carefully.
 
 ## Project Conventions
-- Кодовая база на ESM, импорты через `*.js`.
-- Во многих местах используются `BigInt` и base units (`pUSD base`, `shares base`, `price micro`). При изменениях не подменяй их на float arithmetic.
-- Для пользовательских числовых вводов уже есть парсеры/форматтеры в `src/modules/bot/ui/formatters.js` и conversion helpers в `src/modules/polymarket.js`; переиспользуй их.
-- Для сообщений/уведомлений и HTML formatting сначала смотри `src/modules/bot/ui/formatters.js` и `src/modules/bot/notifications.js`.
-- Локали живут в `src/locales/en.json` и `src/locales/ru.json`; при добавлении новых UI-ключей синхронно обновляй обе локали.
-- Если меняешь callback/text routing, проверь `src/modules/bot/routing/callback-router.js`, `src/modules/bot/routing/text-router.js` и связанный feature module.
-- Если меняешь environment behavior, синхронизируй `.env.example` и README.
+- ESM codebase, imports with `*.js`.
+- Many places use `BigInt` and base units (`pUSD base`, `shares base`, `price micro`). When modifying, do not replace with float arithmetic.
+- Parsers/formatters exist in `src/modules/bot/ui/formatters.js` and conversion helpers in `src/modules/polymarket.js`; reuse them.
+- For messages/notifications and HTML formatting, check `src/modules/bot/ui/formatters.js` and `src/modules/bot/notifications.js` first.
+- Locales reside in `src/locales/en.json` and `src/locales/ru.json`; when adding new UI keys, update both locales.
+- When changing callback/text routing, check `src/modules/bot/routing/callback-router.js`, `src/modules/bot/routing/text-router.js`, and the related feature module.
+- When changing environment behavior, keep `.env.example` and README in sync.
 
 ## Update Rules
-- Изменился публичный запуск/настройка/ENV/PM2/migration flow — обнови `README.md` и при необходимости `.env.example`.
-- Изменились локализованные UI-ключи — обнови оба locale JSON.
-- Изменилась логика auth/config/proxy/logger/polymarket conversions/runtime helpers/withdraw — обнови или добавь unit tests в `tests/unit`.
-- Изменился file tree, набор feature modules или функции, на которые нужно опираться в следующих сессиях — обнови этот `AGENTS.md`.
-- Изменились внешние интеграции, endpoint'ы, SDK-методы, auth headers или fallback-цепочки — обнови разделы `External APIs And SDKs`, `Integration Map`, `SDK Method Map`.
+- If public run/setup/ENV/PM2/migration flow changes — update `README.md` and `.env.example`.
+- If localized UI keys change — update both locale JSON files.
+- If auth/config/proxy/logger/polymarket conversions/runtime helpers/withdraw logic changes — update or add unit tests in `tests/unit`.
+- If file tree, feature modules, or functions change — update this `AGENTS.md`.
+- If external integrations, endpoints, SDK methods, auth headers, or fallback chains change — update `External APIs And SDKs`, `Integration Map`, `SDK Method Map`.
 
 ## External APIs And SDKs
 
 ### Telegram Bot API via `grammy`
-- Библиотека: `grammy`.
-- Основная инициализация: `src/modules/bot/bot.js` → `initBot`, `startBot`, `stopBot`.
-- Feature/UI modules в `src/modules/bot/features/*.js`, роутинг в `src/modules/bot/routing/*.js`, keyboards/formatting в `src/modules/bot/ui/*`.
+- Library: `grammy`.
+- Main initialization: `src/modules/bot/bot.js` → `initBot`, `startBot`, `stopBot`.
+- Feature/UI modules in `src/modules/bot/features/*.js`, routing in `src/modules/bot/routing/*.js`, keyboards/formatting in `src/modules/bot/ui/*`.
 - Auth/config:
   - `TELEGRAM_BOT_TOKEN`
   - `TELEGRAM_ALLOWED_USER_ID`
-- Риск/инвариант: бот single-user; access control и rate limit встроены в middleware `initBot`.
+- Risk/invariant: bot is single-user; access control and rate limiting are built into `initBot` middleware.
 
 ### Polymarket CLOB SDK (`@polymarket/clob-client-v2`)
-- Библиотека: `@polymarket/clob-client-v2` `^1.0.2`.
-- Основные импорты: `src/modules/polymarket.js`, `src/modules/auth.js`.
+- Library: `@polymarket/clob-client-v2` `^1.0.2`.
+- Main imports: `src/modules/polymarket.js`, `src/modules/auth.js`.
 - Base URL: `CLOB_API_URL = https://clob.polymarket.com`.
-- Chain: `Chain.POLYGON` (`137`) через options-object constructor.
+- Chain: `Chain.POLYGON` (`137`) via options-object constructor.
 - Auth model:
-  - signer (`ethers.Wallet`, совместим по интерфейсу с V2 signer)
+  - signer (`ethers.Wallet`, compatible interface with V2 signer)
   - L2 creds `{ key/apiKey, secret, passphrase }`
-  - для HTTP fallback используются `createL2Headers(...)`
-- Где создаётся клиент:
+  - `createL2Headers(...)` is used for HTTP fallback
+- Where client is created:
   - `src/modules/auth.js` → `createL2Credentials` (temporary client for `createOrDeriveApiKey`)
   - `src/modules/polymarket.js` → `initClient`
-- Важные отличия V2 в этом проекте:
-  - конструктор `ClobClient` теперь вызывается через object options (`host`, `chain`, `signer`, `creds`, `funderAddress`)
-  - order args больше не должны зависеть от V1-only полей (`feeRateBps`, `nonce`, `taker`)
-  - collateral на Polygon теперь `pUSD`, а CLOB exchange allowances относятся к V2 exchange адресам
-- Ключевые риски:
-  - не логировать `key`, `secret`, `passphrase`, `Authorization`, cookies
-  - signed HTTP fallback и proxy patching нужно держать синхронными с package layout V2
-  - collateral/allowance state зависит и от SDK, и от onchain approve flow
+- Important V2 differences in this project:
+  - `ClobClient` constructor is now called with object options (`host`, `chain`, `signer`, `creds`, `funderAddress`)
+  - order args must no longer depend on V1-only fields (`feeRateBps`, `nonce`, `taker`)
+  - collateral on Polygon is now `pUSD`, and CLOB exchange allowances apply to V2 exchange addresses
+- Key risks:
+  - do not log `key`, `secret`, `passphrase`, `Authorization`, cookies
+  - keep signed HTTP fallback and proxy patching in sync with V2 package layout
+  - collateral/allowance state depends on both SDK and onchain approve flow
 
 ### Polymarket Gamma API
 - Base URL: `GAMMA_API_URL = https://gamma-api.polymarket.com`.
-- Используется как публичный read API без L2 creds.
-- Главный модуль: `src/modules/polymarket.js`.
-- Дополнительно strategy market discovery: `src/modules/strategyMarketWatcher.js`.
-- Используемые endpoint families по коду:
+- Used as public read API without L2 creds.
+- Main module: `src/modules/polymarket.js`.
+- Additional strategy market discovery: `src/modules/strategyMarketWatcher.js`.
+- Used endpoint families in code:
   - `/markets`
   - `/markets/{id}`
   - `/markets/slug/{slug}`
@@ -123,45 +123,45 @@
   - `/events/slug/{slug}`
   - `/categories`
   - `/tags`
-- Риски:
-  - в коде уже есть fallback по разным именам tag params: `tag_id`, `tagId`, `tag`
-  - некоторые slug/event lookups могут давать 404 для ephemeral slugs; это уже учтено в bot routing/comments
+- Risks:
+  - code includes fallback across different tag param names: `tag_id`, `tagId`, `tag`
+  - some slug/event lookups may return 404 for ephemeral slugs; accounted for in bot routing/comments
 
 ### Polymarket Data API
 - Base URL: `DATA_API_URL = https://data-api.polymarket.com`.
-- Используется для read-only runtime data и reconciliation.
-- Основной модуль: `src/modules/polymarket.js`.
-- Дополнительное использование: `src/modules/workers.js`.
-- Используемые endpoint families по коду:
+- Used for read-only runtime data and reconciliation.
+- Main module: `src/modules/polymarket.js`.
+- Additional usage: `src/modules/workers.js`.
+- Used endpoint families in code:
   - `/positions`
   - `/trades`
   - `/activity`
-- Роль:
+- Role:
   - positions snapshot
   - missing-order reconciliation
-  - fill/activity evidence для worker logic
-- Риск:
-  - пустой/неполный ответ не всегда означает отсутствие позиции; есть explorer/onchain fallback
+  - fill/activity evidence for worker logic
+- Risk:
+  - empty/partial response does not always mean no position; explorer/onchain fallback exists
 
 ### Etherscan V2 API for Polygon fallback
 - Base URL: `https://api.etherscan.io/v2/api`.
 - Auth/config:
   - `ETHERSCAN_API_KEY`
   - `chainid=137`
-- Используется только как fallback/read path в `src/modules/polymarket.js`.
-- Основные сценарии:
-  - `module=account&action=token1155tx` для истории ERC-1155 transfer'ов
-  - `module=proxy&action=eth_getTransactionByHash` для разбора split tx input
-- Зачем нужен:
-  - восстановление onchain positions, когда Data API пустая
-  - восстановление metadata по split-derived token positions
-- Риски:
-  - rate limits уже обрабатываются retry/delay логикой
-  - без `ETHERSCAN_API_KEY` fallback silently деградирует до отсутствия onchain enrichment
+- Used only as fallback/read path in `src/modules/polymarket.js`.
+- Main scenarios:
+  - `module=account&action=token1155tx` for ERC-1155 transfer history
+  - `module=proxy&action=eth_getTransactionByHash` for decoding split tx input
+- Why it is needed:
+  - recovering onchain positions when Data API is empty
+  - recovering metadata for split-derived token positions
+- Risks:
+  - rate limits are handled by retry/delay logic
+  - without `ETHERSCAN_API_KEY`, fallback silently degrades to omitting onchain enrichment
 
 ### OpenRouter Chat Completions API
-- Используется только для optional RU label translation.
-- Основной модуль: `src/modules/ai.js`.
+- Used only for optional UI label translation.
+- Main module: `src/modules/ai.js`.
 - Base path: `OPENROUTER_BASE_URL + /chat/completions`.
 - Required env when enabled:
   - `TRANSLATION_ENABLED=true`
@@ -176,17 +176,17 @@
   - batch translation up to 20 items
   - strict JSON response expected
   - temporary model blacklist on repeated provider/model failures
-- Риски:
-  - translation не критична для core trading flow; при ошибке код откатывается к original texts
-  - non-JSON provider output explicitly считается ошибкой
+- Risks:
+  - translation is not critical for core trading flow; on failure code falls back to original texts
+  - non-JSON provider output is explicitly treated as an error
 
 ### Polygon RPC / ethers.js
-- Библиотека: `ethers` `^5.8.0`.
-- Read/write RPC используется в `src/modules/polymarket.js`, wallet/crypto — в `src/modules/auth.js`, частично `workers.js`/bot features.
+- Library: `ethers` `^5.8.0`.
+- Read/write RPC is used in `src/modules/polymarket.js`, wallet/crypto in `src/modules/auth.js`, partially in `workers.js`/bot features.
 - RPC source:
-  - `POLYGON_RPC_URL` или fallback list в `src/modules/polymarket.js`
-  - fallback URLs из кода: `https://polygon-public.nodies.app`, `https://polygon-bor-rpc.publicnode.com`, `https://polygon.llamarpc.com`
-- Основные onchain объекты:
+  - `POLYGON_RPC_URL` or fallback list in `src/modules/polymarket.js`
+  - fallback URLs in code: `https://polygon-public.nodies.app`, `https://polygon-bor-rpc.publicnode.com`, `https://polygon.llamarpc.com`
+- Main onchain contracts:
   - pUSD ERC20 collateral (`PUSD_ADDRESS`; legacy alias `USDC_ADDRESS` still points here)
   - USDC.e collateral source asset (`USDCE_ADDRESS`)
   - CollateralOnramp (`COLLATERAL_ONRAMP_ADDRESS`) for `wrap(address _asset, address _to, uint256 _amount)`
@@ -194,46 +194,46 @@
   - CTF exchange
   - neg-risk exchange
   - neg-risk adapter
-- Важные константы: `USDC_DECIMALS = 6`, `BINARY_PARTITION = [1, 2]`.
-- Риск:
-  - не ломать base-unit math и approvals
-  - YES/NO conditional tokens здесь ERC-1155 ids, не отдельные ERC20
+- Important constants: `USDC_DECIMALS = 6`, `BINARY_PARTITION = [1, 2]`.
+- Risk:
+  - do not break base-unit math and approvals
+  - YES/NO conditional tokens here are ERC-1155 ids, not separate ERC20s
 
 ### WebSocket market subscriptions
-- Библиотека: `ws`.
-- Модуль: `src/modules/strategyMarketWatcher.js`.
+- Library: `ws`.
+- Module: `src/modules/strategyMarketWatcher.js`.
 - Default URL: `wss://ws-subscriptions-clob.polymarket.com/ws/market`.
-- Назначение: live best-ask updates для strategy markets watcher.
+- Purpose: live best-ask updates for strategy markets watcher.
 - Config env:
   - `STRATEGY_MARKETS_WATCHER_WS_URL`
   - `STRATEGY_MARKETS_WATCHER_SUBSCRIPTION_CHUNK`
   - `STRATEGY_MARKETS_WATCHER_WS_RECONNECT_BASE_MS`
   - `STRATEGY_MARKETS_WATCHER_WS_RECONNECT_MAX_MS`
-- Риск:
-  - reconnect/subscription logic stateful; не менять без проверки `refreshUniverseIfNeeded`, `updateSubscriptions`, `scheduleReconnect`
+- Risk:
+  - reconnect/subscription logic is stateful; do not modify without checking `refreshUniverseIfNeeded`, `updateSubscriptions`, `scheduleReconnect`
 
 ### Proxy/transport patching
-- Модуль: `src/modules/proxy.js`.
-- Библиотеки: `axios`, `https-proxy-agent`, module patching через `createRequire`.
-- Назначение:
-  - нормализовать `PROXY`
-  - пропатчить global fetch, axios defaults, clob-client http helpers, provider send, websocket proxy options
+- Module: `src/modules/proxy.js`.
+- Libraries: `axios`, `https-proxy-agent`, module patching via `createRequire`.
+- Purpose:
+  - normalize `PROXY`
+  - patch global fetch, axios defaults, clob-client http helpers, provider send, websocket proxy options
 - Auth/config:
   - `PROXY`
   - `OUTBOUND_HTTP_TIMEOUT_MS`
-- Риск:
-  - это cross-cutting transport layer; здесь легко сломать сразу CLOB, Gamma, Data API, OpenRouter и WS
+- Risk:
+  - this is a cross-cutting transport layer; easy to break CLOB, Gamma, Data API, OpenRouter, and WS simultaneously
 
 ## Integration Map
 - `src/index.js`
-  - `applyProxyRuntime()` до старта остального runtime
+  - `applyProxyRuntime()` before starting the rest of the runtime
   - `initDatabase()`
   - `initBot()` / `startBot()`
   - `startWorkers()`
 - `src/modules/auth.js`
-  - `ethers.Wallet.createRandom()` для wallet generation
-  - temporary `ClobClient(...).createOrDeriveApiKey()` для L2 creds
-  - machine-specific encryption через `node-machine-id` + `crypto.scryptSync`
+  - `ethers.Wallet.createRandom()` for wallet generation
+  - temporary `ClobClient(...).createOrDeriveApiKey()` for L2 creds
+  - machine-specific encryption via `node-machine-id` + `crypto.scryptSync`
 - `src/modules/polymarket.js`
   - Gamma API: markets/events/categories/tags/market details
   - CLOB SDK: order book, orders, market orders, limit orders, balance allowance, tick size, neg-risk checks, cancel
@@ -245,7 +245,7 @@
   - Gamma `/markets` discovery
   - WebSocket subscription stream for asset price books
 - `src/modules/workers.js`
-  - Data API `/trades` + `/activity` для missing-order status resolution
+  - Data API `/trades` + `/activity` for missing-order status resolution
   - bot notifications via `sendNotification`, `sendPriceAlertNotification`, `sendStrategyMarketAlertNotification`
 - `src/modules/ai.js`
   - OpenRouter `/chat/completions` for optional UI translation only
@@ -284,11 +284,11 @@
 ### `src/modules/auth.js`
 - `generatePrivateKey` → `ethers.Wallet.createRandom()`.
 - `createL2Credentials` → temporary `ClobClient(...)` + `createOrDeriveApiKey()` against CLOB auth flow.
-- `getMachineKey` → `node-machine-id` + `crypto.scryptSync`, не внешний API.
+- `getMachineKey` → `node-machine-id` + `crypto.scryptSync`, not an external API.
 
 ### `src/modules/ai.js`
 - `requestBatchTranslation` → OpenRouter `POST {OPENROUTER_BASE_URL}/chat/completions` with `Authorization: Bearer <OPENROUTER_API_KEY>`.
-- `translateUiTexts` / `translateUiText` → orchestration над OpenRouter batching/cache/fallback.
+- `translateUiTexts` / `translateUiText` → orchestration over OpenRouter batching/cache/fallback.
 
 ### `src/modules/polymarket.js` — Gamma API
 - `getMarkets` → `GET /markets`.
@@ -357,15 +357,15 @@
 ### `src/modules/bot/bot.js`
 - `initBot` → `new Bot(token)`, Telegram middleware, command/callback/text wiring.
 - `startBot` / `stopBot` → Telegram polling lifecycle.
-- Остальные bot functions в основном orchestration/UI и опираются на `polymarket.js`, `database.js`, `config.js`, `i18n.js`, а не напрямую на внешние API.
+- Other bot functions are primarily orchestration/UI and rely on `polymarket.js`, `database.js`, `config.js`, `i18n.js`, not directly on external APIs.
 
 ## API/Fallback Rules
-- Gamma API и Data API — primary read sources.
-- Если Data API positions пустые, код пробует onchain fallback через Etherscan + Polygon RPC.
-- Если `clobClient.getOpenOrders()` падает, код пробует signed HTTP fallback against CLOB (`/orders`, потом `/data/orders`).
-- Translation/OpenRouter не должен блокировать торговый UI; on failure возвращаются original labels.
-- Proxy runtime применяется максимально рано и должен покрывать fetch/axios/CLOB/provider/WS одновременно.
-- Любые изменения в fallback-цепочках проверяй не только тестами, но и чтением смежных вызовов в `workers.js`, `bot.js`, `strategyMarketWatcher.js`.
+- Gamma API and Data API are primary read sources.
+- If Data API positions are empty, code attempts onchain fallback via Etherscan + Polygon RPC.
+- If `clobClient.getOpenOrders()` fails, code attempts signed HTTP fallback against CLOB (`/orders`, then `/data/orders`).
+- Translation/OpenRouter must not block trading UI; on failure original labels are returned.
+- Proxy runtime is applied as early as possible and must cover fetch/axios/CLOB/provider/WS simultaneously.
+- Verify any changes to fallback chains with tests and by reviewing adjacent calls in `workers.js`, `bot.js`, `strategyMarketWatcher.js`.
 
 ## Repository Structure
 ```text
@@ -403,9 +403,9 @@
 │       │   │   ├── markets.js
 │       │   │   ├── orders.js
 │       │   │   ├── positions.js
+│       │   │   ├── quick-bet.js
 │       │   │   ├── security.js
 │       │   │   ├── settings.js
-│       │   │   ├── strategies.js
 │       │   │   ├── trade-limit.js
 │       │   │   ├── trade-market.js
 │       │   │   ├── trade-onchain.js
@@ -425,7 +425,7 @@
 │       ├── logger.js
 │       ├── polymarket.js
 │       ├── proxy.js
-│       ├── strategyMarketWatcher.js
+│       ├── userManager.js
 │       └── workers.js
 └── tests/
     ├── run-tests.js
@@ -436,12 +436,14 @@
         ├── logger.test.js
         ├── migration-common.test.js
         ├── polymarket-conversions.test.js
+        ├── quick-bet.test.js
         ├── runtime.test.js
+        ├── user-manager.test.js
         └── withdraw.test.js
 ```
 
 ## File Ownership Map
-- `.env.example` — обязательные и рекомендуемые env.
+- `.env.example` — required and recommended env.
 - `.gitignore` — git ignore rules.
 - `README.md` — install/run/config/features/migration docs.
 - `ecosystem.config.cjs` — PM2 process config.
@@ -498,10 +500,10 @@
 - `tests/unit/withdraw.test.js` — withdraw helper tests.
 
 ## Function Inventory
-_Note: список ниже собран автоматическим repo scan по top-level named declarations; это рабочая карта для следующих coding-сессий._
+_Note: the list below was gathered by automated repo scan of top-level named declarations; this is a working reference map for future coding sessions._
 
 ### ecosystem.config.cjs
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### scripts/apply-migration-bundle.js
 - `ensureBundle`
@@ -1375,28 +1377,28 @@ _Note: список ниже собран автоматическим repo scan
 - `run`
 
 ### tests/run-tests.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/auth-crypto.test.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/config-runtime.test.js
 - `withEnv`
 
 ### tests/unit/formatters.test.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/logger.test.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/migration-common.test.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/polymarket-conversions.test.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/runtime.test.js
-- top-level named functions/classes не найдены сканером.
+- no top-level named functions/classes found by scanner.
 
 ### tests/unit/withdraw.test.js
 - `isValidEthAddress`

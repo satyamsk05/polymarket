@@ -142,13 +142,13 @@ async function requestBatchTranslation(batch, settings, model, contextLabel = ''
   const timeout = setTimeout(() => controller.abort(), TRANSLATION_TIMEOUT_MS);
 
   const systemPrompt =
-    'You are a translator for a trading bot UI. Translate each input string from English to natural Russian.' +
+    'You are a translator for a trading bot UI. Ensure each input string is formatted in clear, natural English.' +
     ' Keep meaning precise, keep names/tickers/URLs unchanged when appropriate, and do not add explanations.' +
     ' Return strict JSON only: {"translations":[{"index":0,"text":"..."}, ...]}.';
 
   const userPrompt = JSON.stringify({
     task: 'translate_ui_labels',
-    target_language: 'ru',
+    target_language: 'en',
     context: contextLabel || 'prediction market categories, events, and market labels',
     items: batch.map((text, index) => ({ index, text }))
   });

@@ -1,8 +1,10 @@
-import { loadConfig } from './config.js';
+import { loadConfig, getPolygonRpcUrl } from './config.js';
 import { getDecryptedPrivateKey, getDecryptedL2Credentials } from './auth.js';
-import { sendNotification, sendPriceAlertNotification, sendStrategyMarketAlertNotification } from './bot/bot.js';
+import { sendNotification } from './bot/bot.js';
 import {
   initClient,
+  initContracts,
+  redeem,
   getPositions as getApiPositions,
   getOrders as getApiOpenOrders,
   getBestBidAsk,
@@ -14,7 +16,6 @@ import {
   cancelOrder,
   placeMarketSellFOK
 } from './polymarket.js';
-import { createStrategyMarketWatcher } from './strategyMarketWatcher.js';
 import {
   replacePositionsSnapshot,
   getPositions as getDbPositions,
@@ -24,11 +25,9 @@ import {
   getOrderById,
   upsertOrderStatus,
   updateOrderStatus,
-  getActiveStrategies,
-  updateStrategy,
-  getPriceAlert,
-  updatePriceAlert
+  getAllUsers
 } from './database.js';
+import { getUserSession, userContextStorage } from './userManager.js';
 import { Wallet } from 'ethers';
 import { DATA_API_URL } from './constants.js';
 import { createContext, safeLogError, safeLogWarn, safeLogInfo, retry } from './logger.js';
@@ -36,7 +35,7 @@ import { createContext, safeLogError, safeLogWarn, safeLogInfo, retry } from './
 const MINUTE_MS = 60 * 1000;
 const DEFAULT_SYNC_POSITIONS_MS = 60 * MINUTE_MS;
 const DEFAULT_MONITOR_MS = 45 * 1000;
-const DEFAULT_PRICE_ALERT_COOLDOWN_MS = 5 * MINUTE_MS;
+const DEFAULT_5M_STRATEGY_MS = 5 * 1000;
 const DEFAULT_WORKER_HEALTH_LOG_MS = 10 * MINUTE_MS;
 
 const workerTimers = new Map();
@@ -50,21 +49,6 @@ const runtime = {
   chatId: '',
   initPromise: null
 };
-
-const strategyMarketWatcher = createStrategyMarketWatcher({
-  onAlert: async (payload) => {
-    if (!runtime.chatId) return;
-    await sendStrategyMarketAlertNotification(runtime.chatId, payload);
-  },
-  onLog: (level, message, extra = {}) => {
-    const ctx = createContext('workers', 'strategyMarketWatcher');
-    if (level === 'info') {
-      safeLogInfo(ctx, message, extra);
-      return;
-    }
-    safeLogWarn(ctx, message, extra);
-  }
-});
 
 function ensureWorkerMetric(name) {
   if (!workerMetrics.has(name)) {
@@ -712,111 +696,6 @@ export async function syncPositionsWorker() {
   safeLogInfo(ctx, 'Positions snapshot synchronized', { count: snapshot.length });
 }
 
-export async function monitorPricesWorker() {
-  await ensureClientInitialized();
-
-  const config = await loadConfig();
-  const thresholdPercent = Number(config?.notifications?.priceChangePercent ?? 10);
-  const thresholdBps = BigInt(Math.max(1, Math.round(thresholdPercent * 100)));
-  const repeatStepPercent = Number(config?.notifications?.priceRepeatStepPercent ?? 2);
-  const repeatStepBps = BigInt(Math.max(1, Math.round(repeatStepPercent * 100)));
-  const alertCooldownMs = resolvePriceAlertCooldownMs(config);
-  const strategyEntryPriceMap = buildStrategyEntryPriceMap(await getActiveStrategies());
-
-  // Minimum thresholds for price alerts (same as display filter in positions.js)
-  const MIN_DISPLAY_VALUE_USD = 0.01;
-  const MIN_DISPLAY_SHARES_BASE = parseSharesToBase('0.01');
-
-  const dbPositions = await getDbPositions();
-  
-  // Filter out dust positions
-  const filteredPositions = dbPositions.filter(pos => {
-    const sizeBase = parseSharesToBase(String(pos.size ?? pos.quantity ?? pos.amount ?? 0));
-    const currentValue = Number(pos.currentValue ?? pos.current_value ?? 0);
-    return sizeBase >= MIN_DISPLAY_SHARES_BASE || currentValue >= MIN_DISPLAY_VALUE_USD;
-  });
-
-  for (const pos of filteredPositions) {
-    const tokenId = String(pos.token_id || '').trim();
-    if (!tokenId) continue;
-
-    const avgPriceMicro = toBigIntSafe(pos.avg_price_micro, 0n);
-    const referencePriceMicro = strategyEntryPriceMap.get(tokenId) ?? avgPriceMicro;
-    if (referencePriceMicro <= 0n) continue;
-
-    let bestBidStr = null;
-    let bestAskStr = null;
-    try {
-      ({ bestBidStr, bestAskStr } = await getBestBidAsk(tokenId));
-    } catch (error) {
-      const ctx = createContext('workers', 'monitorPricesWorker');
-      safeLogWarn(ctx, 'Could not fetch orderbook for position', {
-        tokenId,
-        message: error?.message
-      });
-      continue;
-    }
-
-    const currentPriceMicro = parsePriceMicroSafe(bestBidStr || bestAskStr);
-    if (currentPriceMicro <= 0n) continue;
-
-    const diffBps = getPercentDiffBps(referencePriceMicro, currentPriceMicro);
-    if (diffBps < thresholdBps) continue;
-
-    const marketId = String(pos.market_id || 'unknown-market');
-    const prevAlert = await getPriceAlert(marketId, tokenId);
-    const prevPriceMicro = toBigIntSafe(prevAlert?.last_price_micro, 0n);
-    // Do not resend the same alert payload if the price has not changed since last alert.
-    if (prevPriceMicro > 0n && prevPriceMicro === currentPriceMicro) {
-      continue;
-    }
-    if (prevPriceMicro > 0n) {
-      const repeatDiffBps = getPercentDiffBps(prevPriceMicro, currentPriceMicro);
-      if (repeatDiffBps < repeatStepBps) continue;
-    }
-    const now = Date.now();
-
-    let shouldNotify = true;
-    if (prevAlert?.last_alert_time) {
-      const lastTs = new Date(prevAlert.last_alert_time).getTime();
-      shouldNotify = Number.isFinite(lastTs) ? (now - lastTs >= alertCooldownMs) : true;
-    }
-
-    if (!shouldNotify) continue;
-
-    const direction = currentPriceMicro >= referencePriceMicro ? '+' : '-';
-    const pct = Number(diffBps) / 100;
-    const sideLabel = String(pos.side || pos.outcome || 'unknown').trim() || 'unknown';
-    try {
-      await sendPriceAlertNotification(runtime.chatId, {
-        market: marketId,
-        side: sideLabel,
-        direction,
-        movePercent: pct,
-        priceMicro: currentPriceMicro,
-        referencePriceMicro
-      });
-    } catch (error) {
-      const ctx = createContext('workers', 'monitorPricesWorker');
-      safeLogWarn(ctx, 'Failed to send price-alert notification', {
-        marketId,
-        tokenId,
-        message: error?.message
-      });
-    }
-    await updatePriceAlert(marketId, tokenId, currentPriceMicro, new Date());
-  }
-}
-
-export async function monitorStrategyMarketsWatcherWorker() {
-  await ensureClientInitialized();
-  const config = await loadConfig();
-  await strategyMarketWatcher.tick({
-    config,
-    chatId: runtime.chatId
-  });
-}
-
 export async function monitorOrdersWorker() {
   await ensureClientInitialized();
   const unmanagedCleanup = await cleanupUnmanagedOrders();
@@ -976,312 +855,6 @@ export async function monitorOrdersWorker() {
   }
 }
 
-export async function monitorStrategiesWorker() {
-  await ensureClientInitialized();
-
-  const strategies = await getActiveStrategies();
-  if (!Array.isArray(strategies) || strategies.length === 0) return;
-
-  const liveOpenOrders = await fetchOpenOrdersWithRetry('monitorStrategiesWorker');
-  if (!liveOpenOrders) {
-    return;
-  }
-  const openOrderIds = new Set(
-    (Array.isArray(liveOpenOrders) ? liveOpenOrders : [])
-      .map((order) => getOrderId(order))
-      .filter(Boolean)
-  );
-
-  const livePositions = await getApiPositions(runtime.walletAddress);
-  const liveQtyByToken = new Map();
-  for (const pos of livePositions) {
-    const tokenId = String(pos.token_id || '').trim();
-    if (!tokenId) continue;
-    liveQtyByToken.set(tokenId, parseSharesBaseSafe(pos.size));
-  }
-
-  for (const strategy of strategies) {
-    try {
-      const yesToken = String(strategy.token_id_yes || '').trim();
-      const noToken = String(strategy.token_id_no || '').trim();
-      if (!yesToken || !noToken) continue;
-
-      const stopLossPercent = Number(strategy.stop_loss_percent ?? 0) / 100;
-      const entryPriceYesMicro = toBigIntSafe(strategy.entry_price_yes_micro, 0n);
-      const entryPriceNoMicro = toBigIntSafe(strategy.entry_price_no_micro, 0n);
-
-      const takePair = parseStrategyOrderPair(strategy.order_id_take);
-      const stopPair = parseStrategyOrderPair(strategy.order_id_stop);
-      const trackedOrderIds = dedupeTokens([...takePair.allIds, ...stopPair.allIds]);
-      const trackedRows = await getOrdersByIds(trackedOrderIds);
-      const rowById = new Map(
-        trackedRows
-          .map((row) => [normalizeOrderId(row?.id), row])
-          .filter(([id]) => id)
-      );
-
-      const legs = [
-        {
-          key: 'yes',
-          label: 'YES',
-          tokenId: yesToken,
-          entryPriceMicro: entryPriceYesMicro,
-          qtyBase: liveQtyByToken.get(yesToken) || 0n,
-          takeOrderId: normalizeOrderId(takePair.yes),
-          stopOrderId: normalizeOrderId(stopPair.yes)
-        },
-        {
-          key: 'no',
-          label: 'NO',
-          tokenId: noToken,
-          entryPriceMicro: entryPriceNoMicro,
-          qtyBase: liveQtyByToken.get(noToken) || 0n,
-          takeOrderId: normalizeOrderId(takePair.no),
-          stopOrderId: normalizeOrderId(stopPair.no)
-        }
-      ];
-
-      const notifications = [];
-
-      for (const leg of legs) {
-        const takeStatus = getOrderStatusById(leg.takeOrderId, rowById, openOrderIds);
-        const stopStatus = getOrderStatusById(leg.stopOrderId, rowById, openOrderIds);
-
-        if (leg.stopOrderId && stopStatus === 'filled') {
-          if (leg.takeOrderId) {
-            try {
-              await cancelOrderAndMark(leg.takeOrderId, { strictCancel: true });
-            } catch (error) {
-              const ctxLog = createContext('workers', 'monitorStrategiesWorker');
-              safeLogWarn(ctxLog, 'Take-profit cancel failed after stop-loss fill; skipping market exit', {
-                strategyId: strategy.id,
-                leg: leg.key,
-                tokenId: leg.tokenId,
-                takeOrderId: leg.takeOrderId,
-                message: error?.message
-              });
-              notifications.push(
-                `Strategy ${strategy.id} ${leg.label} stop-loss filled, but TP cancel failed; manual check required`
-              );
-              continue;
-            }
-            leg.takeOrderId = '';
-          }
-          leg.stopOrderId = '';
-          if (leg.qtyBase > 0n) {
-            try {
-              const result = await placeMarketSellFOK(leg.tokenId, leg.qtyBase);
-              if (!result?.success) {
-                throw new Error(result?.error || 'stop-loss completion market exit failed');
-              }
-              leg.qtyBase = 0n;
-              liveQtyByToken.set(leg.tokenId, 0n);
-            } catch (error) {
-              const ctxLog = createContext('workers', 'monitorStrategiesWorker');
-              safeLogWarn(ctxLog, 'Stop-loss fill market exit failed, trying emergency fallback stop', {
-                strategyId: strategy.id,
-                leg: leg.key,
-                tokenId: leg.tokenId,
-                message: error?.message
-              });
-              try {
-                const fallbackId = await createEmergencyStopLimit(strategy, leg.tokenId, leg.qtyBase);
-                leg.stopOrderId = fallbackId;
-                notifications.push(
-                  `Strategy ${strategy.id} ${leg.label} stop-loss filled; fallback stop order posted`
-                );
-              } catch (fallbackError) {
-                safeLogWarn(ctxLog, 'Emergency stop-limit creation failed after stop-loss fill', {
-                  strategyId: strategy.id,
-                  leg: leg.key,
-                  tokenId: leg.tokenId,
-                  message: fallbackError?.message
-                });
-                notifications.push(
-                  `Strategy ${strategy.id} ${leg.label} stop-loss filled; remaining qty requires manual check`
-                );
-              }
-            }
-          }
-          if (leg.qtyBase <= 0n) {
-            notifications.push(`Strategy ${strategy.id} ${leg.label} leg closed by stop-loss fill`);
-          }
-          continue;
-        }
-
-        if (leg.takeOrderId && takeStatus === 'filled') {
-          if (leg.stopOrderId) {
-            await cancelOrderAndMark(leg.stopOrderId);
-            leg.stopOrderId = '';
-          }
-          leg.takeOrderId = '';
-
-          if (leg.qtyBase > 0n) {
-            try {
-              const result = await placeMarketSellFOK(leg.tokenId, leg.qtyBase);
-              if (!result?.success) {
-                throw new Error(result?.error || 'take-profit completion market exit failed');
-              }
-              leg.qtyBase = 0n;
-              liveQtyByToken.set(leg.tokenId, 0n);
-            } catch (error) {
-              const ctxLog = createContext('workers', 'monitorStrategiesWorker');
-              safeLogWarn(ctxLog, 'Could not fully close remaining qty after take-profit fill', {
-                strategyId: strategy.id,
-                leg: leg.key,
-                tokenId: leg.tokenId,
-                message: error?.message
-              });
-              try {
-                const fallbackId = await createEmergencyStopLimit(strategy, leg.tokenId, leg.qtyBase);
-                leg.stopOrderId = fallbackId;
-                notifications.push(
-                  `Strategy ${strategy.id} ${leg.label} TP filled; fallback stop order posted`
-                );
-              } catch (fallbackError) {
-                safeLogWarn(ctxLog, 'Emergency stop-limit creation failed after TP fill', {
-                  strategyId: strategy.id,
-                  leg: leg.key,
-                  tokenId: leg.tokenId,
-                  message: fallbackError?.message
-                });
-                notifications.push(
-                  `Strategy ${strategy.id} ${leg.label} TP filled; remaining qty requires manual check`
-                );
-              }
-            }
-          } else {
-            notifications.push(`Strategy ${strategy.id} ${leg.label} leg closed by take-profit fill`);
-          }
-          continue;
-        }
-
-        if (leg.qtyBase <= 0n) {
-          if (leg.takeOrderId) {
-            await cancelOrderAndMark(leg.takeOrderId);
-            leg.takeOrderId = '';
-          }
-          if (leg.stopOrderId) {
-            await cancelOrderAndMark(leg.stopOrderId);
-            leg.stopOrderId = '';
-          }
-          continue;
-        }
-
-        if (leg.stopOrderId && (stopStatus === 'open' || stopStatus === 'partially_filled')) {
-          continue;
-        }
-
-        if (leg.stopOrderId && stopStatus !== 'filled') {
-          leg.stopOrderId = '';
-        }
-
-        if (stopLossPercent >= 0 || leg.entryPriceMicro <= 0n) {
-          continue;
-        }
-
-        let currentPriceMicro = 0n;
-        try {
-          const { bestBidStr, bestAskStr } = await getBestBidAsk(leg.tokenId);
-          currentPriceMicro = parsePriceMicroSafe(bestBidStr || bestAskStr);
-        } catch (error) {
-          const ctxLog = createContext('workers', 'monitorStrategiesWorker');
-          safeLogWarn(ctxLog, 'Could not fetch current price for per-leg stop-loss check', {
-            strategyId: strategy.id,
-            leg: leg.key,
-            tokenId: leg.tokenId,
-            message: error?.message
-          });
-          continue;
-        }
-
-        const stopPriceMicro = applyPercentToPriceMicro(leg.entryPriceMicro, stopLossPercent);
-        if (currentPriceMicro <= 0n || stopPriceMicro <= 0n || currentPriceMicro > stopPriceMicro) {
-          continue;
-        }
-
-        if (leg.takeOrderId) {
-          await cancelOrderAndMark(leg.takeOrderId);
-          leg.takeOrderId = '';
-        }
-
-        try {
-          const result = await placeMarketSellFOK(leg.tokenId, leg.qtyBase);
-          if (!result?.success) {
-            throw new Error(result?.error || 'stop-loss market exit failed');
-          }
-          leg.qtyBase = 0n;
-          liveQtyByToken.set(leg.tokenId, 0n);
-          leg.stopOrderId = '';
-          notifications.push(
-            `Strategy ${strategy.id} ${leg.label} stop-loss executed at ${formatPriceFromMicro(currentPriceMicro)}`
-          );
-        } catch (error) {
-          const ctxLog = createContext('workers', 'monitorStrategiesWorker');
-          safeLogWarn(ctxLog, 'Market SL exit failed, placing emergency limit stop for leg', {
-            strategyId: strategy.id,
-            leg: leg.key,
-            tokenId: leg.tokenId,
-            message: error?.message
-          });
-          try {
-            const fallbackId = await createEmergencyStopLimit(strategy, leg.tokenId, leg.qtyBase);
-            leg.stopOrderId = fallbackId;
-            notifications.push(
-              `Strategy ${strategy.id} ${leg.label} stop-loss triggered at ${formatPriceFromMicro(currentPriceMicro)} (fallback stop posted)`
-            );
-          } catch (fallbackError) {
-            safeLogWarn(ctxLog, 'Emergency stop-limit creation failed for leg', {
-              strategyId: strategy.id,
-              leg: leg.key,
-              tokenId: leg.tokenId,
-              message: fallbackError?.message
-            });
-            notifications.push(
-              `Strategy ${strategy.id} ${leg.label} stop-loss triggered but exit is incomplete; manual check required`
-            );
-          }
-        }
-      }
-
-      const nextTake = encodeStrategyOrderPair({ yes: legs[0].takeOrderId, no: legs[1].takeOrderId });
-      const nextStop = encodeStrategyOrderPair({ yes: legs[0].stopOrderId, no: legs[1].stopOrderId });
-      const hasQty = legs.some((leg) => leg.qtyBase > 0n);
-      const hasPendingOrders = legs.some((leg) => leg.takeOrderId || leg.stopOrderId);
-      const nextStatus = hasQty || hasPendingOrders ? 'active' : 'closed';
-
-      const currentTake = strategy.order_id_take ? String(strategy.order_id_take) : null;
-      const currentStop = strategy.order_id_stop ? String(strategy.order_id_stop) : null;
-      const shouldUpdate =
-        String(strategy.status || '') !== nextStatus ||
-        (currentTake || null) !== (nextTake || null) ||
-        (currentStop || null) !== (nextStop || null);
-
-      if (shouldUpdate) {
-        await updateStrategy(strategy.id, {
-          status: nextStatus,
-          order_id_take: nextTake,
-          order_id_stop: nextStop
-        });
-      }
-
-      if (nextStatus === 'closed' && shouldUpdate) {
-        notifications.push(`Strategy ${strategy.id} closed`);
-      }
-
-      for (const note of notifications) {
-        await sendWorkerNotification(note);
-      }
-    } catch (error) {
-      const ctxLog = createContext('workers', 'monitorStrategiesWorker');
-      safeLogWarn(ctxLog, 'Strategy monitor cycle failed for one strategy', {
-        strategyId: strategy?.id,
-        message: error?.message
-      });
-    }
-  }
-}
-
 async function runWorker(name, handler) {
   const metric = ensureWorkerMetric(name);
   if (workerRunning.has(name)) {
@@ -1329,6 +902,116 @@ function scheduleWorker(name, intervalMs, handler, runImmediately = true) {
   workerTimers.set(name, timer);
 }
 
+const inFlightRedeems = new Set();
+
+function canRedeemPosition(position) {
+  const conditionId = position?.conditionId || position?.condition_id || position?.conditionID;
+  if (!conditionId) return false;
+
+  // Check explicit redeemable flags
+  if (position?.redeemable === true || position?.isRedeemable === true || position?.canRedeem === true) {
+    return true;
+  }
+
+  // Check numeric amount fields
+  if (Number(position?.redeemable_amount) > 0 || Number(position?.redeemableAmount) > 0 || Number(position?.claimable) > 0) {
+    return true;
+  }
+
+  // Backup check: curPrice=1 means winning position
+  const curPrice = position?.curPrice ?? position?.currentPrice ?? position?.cur_price;
+  const realizedPnl = position?.realizedPnl ?? position?.realized_pnl;
+
+  if (curPrice !== undefined && Number(curPrice) === 1) {
+    if (realizedPnl !== undefined) {
+      const pnl = Number(realizedPnl);
+      if (pnl === 0 || isNaN(pnl)) {
+        return true;
+      }
+    } else {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Background auto-redeem worker for all active users
+async function autoRedeemWorker() {
+  const users = getAllUsers();
+  if (!users || users.length === 0) return;
+
+  for (const user of users) {
+    const tId = user.telegram_id;
+    try {
+      const session = await getUserSession(tId);
+      if (!session || !session.walletAddress || !session.signer) continue;
+
+      await userContextStorage.run(session, async () => {
+        let positions = [];
+        try {
+          positions = await getApiPositions(session.walletAddress);
+        } catch {
+          return;
+        }
+
+        if (!Array.isArray(positions) || positions.length === 0) return;
+
+        for (const pos of positions) {
+          if (!canRedeemPosition(pos)) continue;
+
+          const conditionId = pos.conditionId || pos.condition_id || pos.conditionID;
+          if (!conditionId || !/^0x[a-fA-F0-9]{64}$/.test(conditionId)) continue;
+
+          const lockKey = `${session.walletAddress}:${conditionId}`.toLowerCase();
+          if (inFlightRedeems.has(lockKey)) continue;
+
+          inFlightRedeems.add(lockKey);
+          const ctxLog = createContext('workers', 'autoRedeemWorker');
+          safeLogInfo(ctxLog, 'Executing auto-redeem for winning position', {
+            telegramId: tId,
+            wallet: session.walletAddress,
+            conditionId,
+            market: pos.market
+          });
+
+          try {
+            await initContracts(session.signer, getPolygonRpcUrl());
+            const receipt = await redeem(conditionId);
+
+            const txHash = receipt?.hash || '';
+            const txLink = txHash ? `<a href="https://polygonscan.com/tx/${txHash}">${txHash.slice(0, 10)}...</a>` : '';
+
+            const notifyMsg =
+              `🎉 <b>Winning Position Auto-Redeemed!</b>\n\n` +
+              `Market: <code>${pos.market || '5M Round'}</code>\n` +
+              `Winning Shares: <b>${pos.size || '0'} shares</b>\n` +
+              `Status: <b>USDC credited to your wallet ✅</b>\n` +
+              (txLink ? `Tx: ${txLink}` : '');
+
+            try {
+              await sendNotification(tId, notifyMsg, { parse_mode: 'HTML' });
+            } catch {}
+          } catch (redeemErr) {
+            safeLogWarn(ctxLog, 'Auto-redeem attempt skipped or already claimed', {
+              conditionId,
+              message: redeemErr?.message
+            });
+          } finally {
+            setTimeout(() => inFlightRedeems.delete(lockKey), 60_000);
+          }
+        }
+      });
+    } catch (userErr) {
+      const ctx = createContext('workers', 'autoRedeemWorker');
+      safeLogWarn(ctx, 'Error in auto-redeem loop for user', {
+        telegramId: tId,
+        message: userErr?.message
+      });
+    }
+  }
+}
+
 export function startWorkers() {
   if (workersStarted) return;
   workersStarted = true;
@@ -1336,12 +1019,11 @@ export function startWorkers() {
   const syncPositionsMs = parseIntervalEnv('WORKER_SYNC_POSITIONS_MS', DEFAULT_SYNC_POSITIONS_MS);
   const monitorMs = parseIntervalEnv('WORKER_MONITOR_MS', DEFAULT_MONITOR_MS);
   const healthLogMs = parseIntervalEnv('WORKER_HEALTH_LOG_MS', DEFAULT_WORKER_HEALTH_LOG_MS);
+  const autoRedeemMs = parseIntervalEnv('WORKER_AUTO_REDEEM_MS', 60 * 1000);
 
   scheduleWorker('syncPositionsWorker', syncPositionsMs, syncPositionsWorker, true);
-  scheduleWorker('monitorPricesWorker', monitorMs, monitorPricesWorker, true);
-  scheduleWorker('monitorStrategyMarketsWatcherWorker', monitorMs, monitorStrategyMarketsWatcherWorker, true);
-  scheduleWorker('monitorStrategiesWorker', monitorMs, monitorStrategiesWorker, true);
   scheduleWorker('monitorOrdersWorker', monitorMs, monitorOrdersWorker, false);
+  scheduleWorker('autoRedeemWorker', autoRedeemMs, autoRedeemWorker, false);
   scheduleWorker(
     'healthLogWorker',
     healthLogMs,
@@ -1366,7 +1048,6 @@ export function stopWorkers() {
   for (const timer of workerTimers.values()) {
     clearInterval(timer);
   }
-  strategyMarketWatcher.shutdown().catch(() => {});
   workerTimers.clear();
   workerRunning.clear();
   workersStarted = false;

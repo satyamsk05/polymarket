@@ -5,8 +5,7 @@ import { getLanguageSelectionKeyboard } from '../ui/keyboards.js';
 
 // Show language selection screen
 export async function showLanguageSelectionScreen(ctx) {
-  // Use hardcoded bilingual prompt since language is not selected yet
-  const message = 'Пожалуйста, выберите язык / Please select your language:';
+  const message = 'Please select your language:';
   await ctx.reply(message, {
     reply_markup: getLanguageSelectionKeyboard()
   });
@@ -54,11 +53,9 @@ export async function handleLanguageSelectionAction(ctx, lang, getMainMenuKeyboa
 // Show language settings in Settings menu
 export async function showLanguageSettingsMenu(ctx) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   
   const keyboard = new InlineKeyboard()
-    .text('🇷🇺 Русский', 'set_lang:ru')
-    .row()
     .text('🇬🇧 English', 'set_lang:en')
     .row()
     .text(t('back'), 'settings');

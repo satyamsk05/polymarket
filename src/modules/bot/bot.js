@@ -1,4 +1,4 @@
-﻿import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { loadConfig, updateConfig, ensureConfigFileExists, isLanguageConfigured, isWalletConfigured, getPolygonRpcUrl } from '../config.js';
 import { getTranslator, getLocalesCache } from '../i18n.js';
 import { getDecryptedPrivateKey, getDecryptedL2Credentials, initializeWallet } from '../auth.js';
@@ -38,6 +38,7 @@ import {
   getCollateralStatus,
   getCollateralBalanceBase,
   getOnchainAllowancesUSDC,
+  getOnchainReadProvider,
   invalidateOnchainPositionCaches
 } from '../polymarket.js';
 import {
@@ -56,6 +57,7 @@ import {
   updateStrategy,
   getActiveStrategies as getDbActiveStrategies
 } from '../database.js';
+import { getUserSession, userContextStorage, MAX_USERS } from '../userManager.js';
 import { Wallet } from 'ethers';
 import {
   RATE_LIMIT_MS,
@@ -108,7 +110,7 @@ import {
   setCategoriesCatalogCache,
   strategyMarketsCache
 } from './runtime.js';
-import { getMainMenuKeyboard, buildMergeAmountKeyboard } from './ui/keyboards.js';
+import { getMainMenuKeyboard, getPersistentBottomKeyboard, getSettingsBottomKeyboard, buildMergeAmountKeyboard } from './ui/keyboards.js';
 import {
   toUnitIntervalOrNull,
   escapeHtml,
@@ -137,7 +139,7 @@ import { createMarketsFeature } from './features/markets.js';
 import { createMarketDetailsFeature } from './features/market-details.js';
 import { createPositionsFeature } from './features/positions.js';
 import { createOrdersFeature } from './features/orders.js';
-import { createStrategiesFeature } from './features/strategies.js';
+import { createQuickBetFeature } from './features/quick-bet.js';
 import { createSecurityFeature } from './features/security.js';
 import { createSettingsFeature } from './features/settings.js';
 import { createWithdrawFeature } from './features/withdraw.js';
@@ -158,39 +160,39 @@ export async function initBot(token, allowedUserIdParam) {
   
   setBot(new Bot(token));
   
-  // Access control middleware
+  // Access control middleware (Multi-user up to MAX_USERS = 10 users)
   bot.use(async (ctx, next) => {
     const userId = ctx.from?.id;
-    
-    if (!userId || userId.toString() !== allowedUserId.toString()) {
-      // Load config to get language for i18n
-      const config = await loadConfig();
-      const t = await getTranslator(config.language || 'ru');
-      
-      if (ctx.callbackQuery) {
-        await ctx.answerCallbackQuery(t('error_access_denied'));
-      } else {
-        await ctx.reply(t('error_access_denied'));
-      }
-      return;
-    }
-    
-    // Rate limiting
+    if (!userId) return;
+
+    // Rate limiting per user
     const now = Date.now();
     const lastCommand = rateLimits.get(userId) || 0;
     if (now - lastCommand < RATE_LIMIT_MS) {
-      const config = await loadConfig();
-      const t = await getTranslator(config.language || 'ru');
       if (ctx.callbackQuery) {
-        await ctx.answerCallbackQuery(t('error_rate_limit'));
+        await ctx.answerCallbackQuery('Rate limit reached, please slow down.');
       } else {
-        await ctx.reply(t('error_rate_limit'));
+        await ctx.reply('Rate limit reached, please slow down.');
       }
       return;
     }
     rateLimits.set(userId, now);
-    
-    await next();
+
+    const session = await getUserSession(userId);
+    if (!session || session.error === 'LIMIT_REACHED') {
+      const msg = `❌ <b>Access Denied</b>\n\nSorry, the maximum limit of 10 users has been reached.`;
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery('Limit reached (max 10 users)');
+      } else {
+        await ctx.reply(msg, { parse_mode: 'HTML' });
+      }
+      return;
+    }
+
+    // Run downstream inside user's isolated async context
+    await userContextStorage.run(session, async () => {
+      await next();
+    });
   });
   
   // /start command
@@ -229,35 +231,44 @@ async function handleLanguageSelection(ctx, lang) {
 
 // Handle /start command
 async function handleStart(ctx) {
-  const langConfigured = await isLanguageConfigured();
-  
-  if (!langConfigured) {
-    // First run: show language selection
-    await showLanguageSelection(ctx);
+  const store = userContextStorage?.getStore?.();
+  const config = await loadConfig();
+  const t = await getTranslator(config.language || 'en');
+  const walletConfigured = Boolean(config.walletAddress);
+
+  if (store?.isNew) {
+    let newMsg = `🎉 <b>Welcome to Polymarket Bot!</b>\n\n` +
+                 `Your dedicated Polymarket wallet has been generated:\n` +
+                 `<code>${store.walletAddress}</code> (User ${store.userNumber || ''}/${MAX_USERS})\n\n` +
+                 `⚠️ <b>Quick Setup Guide:</b>\n` +
+                 `1. Deposit Polygon <b>POL</b> (for gas fees) and <b>USDC</b> into this address.\n` +
+                 `2. Go to <b>⚙️ Settings</b> and tap <b>🔑 Set Allowances</b>.\n` +
+                 `3. Tap <b>⚡️ 1-Click Bet</b> to start trading, or simply type <code>50 up</code> directly in chat!`;
+    delete store.isNew;
+    await ctx.reply(newMsg, {
+      reply_markup: getPersistentBottomKeyboard(),
+      parse_mode: 'HTML'
+    });
     return;
   }
-  
-  const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
-  
-  const walletConfigured = await isWalletConfigured();
-  
+
   let message = `<b>${t('welcome')}</b>\n\n` +
                 `<b>${t('wallet_status')}:</b> ` +
                 (walletConfigured ? `<code>${config.walletAddress}</code>` : t('not_configured'));
-  
+
   if (!walletConfigured) {
     message += '\n\n' + t('wallet_not_configured_help');
   }
-  
+
   await ctx.reply(message, {
-    reply_markup: await getMainMenuKeyboard(config.language || 'ru'),
+    reply_markup: getPersistentBottomKeyboard(),
     parse_mode: 'HTML'
   });
 }
 
 const handleCallback = createHandleCallbackRouter({
   handleLanguageSelection,
+  showMarketsList,
   showMarketCategoriesList,
   showStrategyMarketsList,
   getCachedStrategyMarket,
@@ -303,10 +314,10 @@ const handleCallback = createHandleCallbackRouter({
   startRedeemFromCachedPosition,
   showOrderDetailsFromCache,
   showOrders,
-  showStrategies,
-  showStrategyDetailsFromCache,
-  startCloseStrategyFromCache,
-  executeConfirmedStrategyClose,
+  showQuickBet,
+  handleQuickBetAmount,
+  handleQuickBetCoin,
+  handleQuickBetExecute,
   cancelCachedOrder,
   executeConfirmedSplit,
   executeConfirmedMerge,
@@ -448,34 +459,12 @@ const {
 });
 
 const {
-  showStrategies: showStrategiesFeature,
-  showStrategyDetailsFromCache: showStrategyDetailsFromCacheFeature,
-  startCloseStrategyFromCache: startCloseStrategyFromCacheFeature,
-  executeConfirmedStrategyClose: executeConfirmedStrategyCloseFeature
-} = createStrategiesFeature({
-  createContext,
-  safeLogError,
-  safeLogWarn,
-  ensureClientInitialized,
-  ensureAutoAllowancesConfigured,
-  ensureContractsInitialized,
-  getPositionSharesForTokenFromList,
-  getStrategyStatusText,
-  formatStrategyPercentValue,
-  getCachedStrategy,
-  parseStrategyOrderPair,
-  getOrderById,
-  extractOrderId,
-  getOrderStatusText,
-  formatStrategyOrderStatus,
-  parseBaseUnitsBigIntSafe,
-  shortOrderIdOrNA,
-  getMainMenuKeyboard,
-  getTxHashFromResult,
-  updateStrategy,
-  encodeStrategyOrderPair,
-  updateOrderStatus,
-  formatTxHashLink
+  showQuickBetMenu: showQuickBetMenuFeature,
+  handleSelectAmount: handleSelectAmountFeature,
+  handleToggleCoin: handleToggleCoinFeature,
+  handleExecuteQuickBet: handleExecuteQuickBetFeature
+} = createQuickBetFeature({
+  ensureClientInitialized
 });
 
 const {
@@ -658,6 +647,22 @@ const handleTextMessage = createHandleTextMessageRouter({
   parsePolymarketEventUrl,
   handlePolymarketEventUrlInput,
   getMainMenuKeyboard,
+  getPersistentBottomKeyboard,
+  showQuickBet,
+  showMarketsList,
+  showPositions,
+  showOrders,
+  showSettings,
+  handleShowBalance,
+  handleManualRedeem,
+  handleQuickBetAmount,
+  handleQuickBetCoin,
+  handleQuickBetExecute,
+  handleSetAllowances,
+  handleCollateralStatus,
+  handleWrapAllUsdce,
+  startWithdrawFlow,
+  handleStartExportPk,
   handleBuyAmount,
   handleSellAmount,
   handleSplitAmount,
@@ -1432,18 +1437,25 @@ function getCachedMarketDetailsState(chatId) {
 }
 
 function parseMarketTokensAndOutcomes(marketData, t) {
-  let clobTokenIds = [];
-  let outcomes = [];
-  try {
-    if (marketData?.clobTokenIds) {
-      clobTokenIds = JSON.parse(marketData.clobTokenIds);
+  const parseArr = (val) => {
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string' && val.trim()) {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (_) {}
     }
-    if (marketData?.outcomes) {
-      outcomes = JSON.parse(marketData.outcomes);
-    }
-  } catch {
-    clobTokenIds = [];
-    outcomes = [];
+    return [];
+  };
+
+  let clobTokenIds = parseArr(marketData?.clobTokenIds);
+  if (clobTokenIds.length === 0 && Array.isArray(marketData?.tokens)) {
+    clobTokenIds = marketData.tokens.map((tok) => tok.token_id || tok.tokenId).filter(Boolean);
+  }
+
+  let outcomes = parseArr(marketData?.outcomes);
+  if (outcomes.length === 0 && Array.isArray(marketData?.tokens)) {
+    outcomes = marketData.tokens.map((tok) => tok.outcome).filter(Boolean);
   }
 
   return {
@@ -2542,20 +2554,178 @@ async function showPositions(ctx) {
   await showPositionsFeature(ctx);
 }
 
-async function showStrategies(ctx) {
-  await showStrategiesFeature(ctx);
+async function showQuickBet(ctx) {
+  await showQuickBetMenuFeature(ctx);
 }
 
-async function showStrategyDetailsFromCache(ctx, index) {
-  await showStrategyDetailsFromCacheFeature(ctx, index);
+async function handleQuickBetAmount(ctx, amount) {
+  await handleSelectAmountFeature(ctx, amount);
 }
 
-async function startCloseStrategyFromCache(ctx, index) {
-  await startCloseStrategyFromCacheFeature(ctx, index);
+async function handleQuickBetCoin(ctx, coin) {
+  await handleToggleCoinFeature(ctx, coin);
 }
 
-async function executeConfirmedStrategyClose(ctx) {
-  await executeConfirmedStrategyCloseFeature(ctx);
+async function handleQuickBetExecute(ctx, side, customAmount = null, customCoin = null) {
+  await handleExecuteQuickBetFeature(ctx, side, customAmount, customCoin);
+}
+
+async function handleShowBalance(ctx) {
+  const config = await loadConfig();
+  const walletAddress = config.walletAddress;
+
+  if (!walletAddress) {
+    return await ctx.reply('❌ No wallet configured.', {
+      reply_markup: getPersistentBottomKeyboard()
+    });
+  }
+
+  try {
+    let pusdDisplay = '0.00';
+    let usdceDisplay = '0.00';
+    let polDisplay = '0.0000';
+
+    try {
+      await ensureClientInitialized();
+      const { balance, usdceBalance } = await getCollateralStatus();
+      pusdDisplay = formatUSDCFromBase(BigInt(balance || '0'));
+      usdceDisplay = formatUSDCFromBase(BigInt(usdceBalance || '0'));
+    } catch {}
+
+    try {
+      const provider = await getOnchainReadProvider();
+      if (provider) {
+        const polWei = await provider.getBalance(walletAddress);
+        polDisplay = parseFloat(ethers.utils.formatEther(polWei)).toFixed(4);
+      }
+    } catch {}
+
+    let text = `💰 <b>Polymarket Account Balance</b>\n\n`;
+    text += `💵 <b>Trading Balance:</b> <code>$${pusdDisplay} USDC</code>\n`;
+    text += `⛽ <b>Gas (Polygon POL):</b> <code>${polDisplay} POL</code>\n`;
+    if (Number(usdceDisplay) > 0) {
+      text += `🔄 <b>USDC.e (Unwrapped):</b> <code>$${usdceDisplay}</code>\n`;
+    }
+    text += `\n📬 <b>Wallet:</b> <code>${walletAddress}</code>`;
+
+    await ctx.reply(text, {
+      reply_markup: getPersistentBottomKeyboard(),
+      parse_mode: 'HTML'
+    });
+  } catch (error) {
+    await ctx.reply('❌ Failed to fetch balance. Please try again.', {
+      reply_markup: getPersistentBottomKeyboard()
+    });
+  }
+}
+
+async function handleManualRedeem(ctx) {
+  const config = await loadConfig();
+  const walletAddress = config.walletAddress;
+
+  if (!walletAddress) {
+    return await ctx.reply('❌ No wallet configured.', {
+      reply_markup: getSettingsBottomKeyboard()
+    });
+  }
+
+  const waitMsg = await ctx.reply('🔄 <i>Checking for redeemable winning positions...</i>', {
+    parse_mode: 'HTML'
+  });
+
+  try {
+    let positions = [];
+    try {
+      positions = await getPositions(walletAddress, { forceOnchainRefresh: true });
+    } catch (err) {
+      safeLogWarn(createContext('bot', 'handleManualRedeem'), 'Failed to fetch positions from API', { error: err?.message });
+    }
+
+    const redeemable = (positions || []).filter(canRedeemPosition);
+
+    if (redeemable.length === 0) {
+      const emptyMsg =
+        'ℹ️ <b>No redeemable winning positions found.</b>\n\n' +
+        'There are currently no resolved winning rounds pending redemption.\n\n' +
+        '<i>Note: Background auto-redeem is active and checks every 1 minute.</i>';
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        waitMsg.message_id,
+        emptyMsg,
+        {
+          reply_markup: getSettingsBottomKeyboard(),
+          parse_mode: 'HTML'
+        }
+      ).catch(async () => {
+        await ctx.reply(emptyMsg, { reply_markup: getSettingsBottomKeyboard(), parse_mode: 'HTML' });
+      });
+      return;
+    }
+
+    await ensureContractsInitialized();
+
+    let successCount = 0;
+    const details = [];
+
+    for (const pos of redeemable) {
+      const conditionId = getPositionConditionId(pos);
+      if (!conditionId) continue;
+
+      try {
+        const receipt = await redeem(conditionId);
+        const txHash = receipt?.hash || '';
+        const txLink = txHash ? `<a href="https://polygonscan.com/tx/${txHash}">${txHash.slice(0, 10)}...</a>` : '';
+        const title = pos.title || pos.market || '5M Round';
+        const shares = pos.size || pos.shares || '0';
+        details.push(`• <b>${title}</b>: ${shares} shares ${txLink ? `(${txLink})` : ''}`);
+        successCount++;
+      } catch (err) {
+        safeLogWarn(createContext('bot', 'handleManualRedeem'), 'Failed to redeem position', {
+          conditionId,
+          error: err?.message
+        });
+      }
+    }
+
+    if (successCount > 0) {
+      let msg = `🎉 <b>Successfully Redeemed ${successCount} Winning Position(s)!</b>\n\n`;
+      msg += details.join('\n') + '\n\n';
+      msg += `💵 <b>USDC has been credited to your wallet balance.</b>`;
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        waitMsg.message_id,
+        msg,
+        {
+          reply_markup: getSettingsBottomKeyboard(),
+          parse_mode: 'HTML'
+        }
+      ).catch(async () => {
+        await ctx.reply(msg, {
+          reply_markup: getSettingsBottomKeyboard(),
+          parse_mode: 'HTML'
+        });
+      });
+    } else {
+      const alreadyClaimedMsg = '⚠️ <b>Redeem process complete</b>: Positions are either already claimed or waiting for final onchain settlement.';
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        waitMsg.message_id,
+        alreadyClaimedMsg,
+        {
+          reply_markup: getSettingsBottomKeyboard(),
+          parse_mode: 'HTML'
+        }
+      ).catch(async () => {
+        await ctx.reply(alreadyClaimedMsg, { reply_markup: getSettingsBottomKeyboard(), parse_mode: 'HTML' });
+      });
+    }
+  } catch (error) {
+    safeLogError(createContext('bot', 'handleManualRedeem'), 'Error in manual redeem', { error: error?.message });
+    await ctx.reply(`❌ <b>Redeem error:</b> ${error?.message || 'Transaction failed.'}`, {
+      reply_markup: getSettingsBottomKeyboard(),
+      parse_mode: 'HTML'
+    });
+  }
 }
 
 // Handle buy percentage selection (percent of available USDC collateral)
@@ -2856,10 +3026,10 @@ export async function sendStrategyMarketAlertNotification(chatId, payload = {}) 
 // Show main menu
 export async function showMainMenu(chatId) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
 
   await sendMessage(chatId, t('main_menu'), {
-    reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+    reply_markup: getPersistentBottomKeyboard()
   });
 }
 
@@ -2885,58 +3055,58 @@ export function stopBot() {
 
 // Placeholder exports for future implementation
 export async function showMarketCategories(chatId) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('categories_title', { page: 1 }));
 }
 
 export async function showMarketsListLegacy(chatId, category, page) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('markets_title', { page: page || 1 }));
 }
 
 export async function showMarketPage(chatId, marketSlug) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('market_details'));
 }
 
 export async function handleBuyMarket(chatId, marketSlug, tokenId, side) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, `${t('buy')} ${side}`);
 }
 
 export async function handleSellMarket(chatId, marketSlug, tokenId, side) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, `${t('sell')} ${side}`);
 }
 
 export async function handleBuyLimit(chatId, marketSlug, tokenId, side) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, `${t('limit_buy')}: ${t('select_market_first', { action: t('buy') })}`);
 }
 
 export async function handleSellLimit(chatId, marketSlug, tokenId, side) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, `${t('limit_sell')}: ${t('select_market_first', { action: t('sell') })}`);
 }
 
 export async function handleSplitLegacy(chatId, marketSlug, conditionId) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('split'));
 }
 
 export async function handleMergeLegacy(chatId, marketSlug, conditionId, yesTokenId, noTokenId) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('merge'));
 }
 
 export async function showPositionDetails(chatId, positionId) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, 'Position details feature coming in Phase 2+');
 }
 
 export async function showActiveStrategies(chatId) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   const strategies = await getDbActiveStrategies();
 
   if (!strategies || strategies.length === 0) {
@@ -2956,23 +3126,23 @@ export async function showActiveStrategies(chatId) {
 }
 
 export async function handleStartStrategy(chatId, marketSlug) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, `${t('strategy_start')}: ${t('select_market_first', { action: t('strategy_start') })}`);
 }
 
 export async function handleIncreasePosition(chatId, strategyId) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('error_generic'));
 }
 
 export async function handlePartialClose(chatId, strategyId) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, t('error_generic'));
 }
 
 export async function handleCloseStrategy(chatId, strategyId) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   if (!strategyId) {
     await sendMessage(chatId, t('error_generic'));
     return;
@@ -2982,13 +3152,13 @@ export async function handleCloseStrategy(chatId, strategyId) {
 }
 
 export async function handleLanguageChange(chatId, language) {
-  const t = await getTranslator((await loadConfig()).language || 'ru');
+  const t = await getTranslator((await loadConfig()).language || 'en');
   await sendMessage(chatId, `Language change to ${language} - Coming soon`);
 }
 
 export async function handleExportPrivateKey(chatId) {
   const config = await loadConfig();
-  const t = await getTranslator(config.language || 'ru');
+  const t = await getTranslator(config.language || 'en');
   
   // This is a legacy placeholder - the actual export flow is handled via callbacks
   // This function is kept for API compatibility

@@ -21,3 +21,8 @@ backup/
 migration-bundle-*.json
 request-*.json
 request-*.private.pem
+
+# OS generated files
+.DS_Store
+Thumbs.db
+

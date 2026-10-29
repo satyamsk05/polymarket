@@ -177,10 +177,14 @@ export function createTradeMarketFeature(deps) {
       `<b>${t('market_question')}:</b> ${escapeHtml(marketData.question || marketData.title || marketRef)}\n\n` +
       `${t('select_outcome')}${balancesBlock}`;
 
+    const isUpDown = /up|down/i.test(firstOutcome) || /up|down/i.test(secondOutcome);
+    const upBtnLabel = isUpDown ? '🟢 UP' : (truncateButtonLabel(firstOutcome) || t('yes'));
+    const downBtnLabel = isUpDown ? '🔴 DOWN' : (truncateButtonLabel(secondOutcome) || t('no'));
+
     const keyboard = new InlineKeyboard()
-      .text(truncateButtonLabel(firstOutcome) || t('yes'), `mo:${actionKey}:0`)
+      .text(upBtnLabel, `mo:${actionKey}:0`)
       .row()
-      .text(truncateButtonLabel(secondOutcome) || t('no'), `mo:${actionKey}:1`)
+      .text(downBtnLabel, `mo:${actionKey}:1`)
       .row()
       .text(t('back'), 'mkt_back');
 
@@ -305,7 +309,7 @@ export function createTradeMarketFeature(deps) {
 
   async function startBuyFlow(ctx, slug, tokenId, side) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const translatedSide = await translateUiLabelForLanguage(language, side, 'buy flow side label');
 
@@ -347,7 +351,7 @@ export function createTradeMarketFeature(deps) {
 
   async function handleBuyAmount(ctx, state, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     let usdcBase;
@@ -376,7 +380,7 @@ export function createTradeMarketFeature(deps) {
       safeLogError(ctxLog, error, { state });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.reply(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       userStates.delete(chatId);
     } finally {
@@ -386,13 +390,13 @@ export function createTradeMarketFeature(deps) {
 
   async function executeConfirmedBuy(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const state = userStates.get(chatId);
     if (!state || !state.usdcBase || !state.slug || !state.tokenId) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -420,12 +424,12 @@ export function createTradeMarketFeature(deps) {
         }
         await ctx.editMessageText(
           t('order_executed', { orderId: orderIdDisplay }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru'), parse_mode: 'HTML' }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en'), parse_mode: 'HTML' }
         );
       } else {
         await ctx.editMessageText(
           t('error_order_failed', { message: getResultErrorMessage(result, t) }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
         );
       }
     } catch (error) {
@@ -433,7 +437,7 @@ export function createTradeMarketFeature(deps) {
       safeLogError(ctxLog, error, { slug, tokenId, usdcBase: state.usdcBase.toString() });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
     } finally {
       userStates.delete(chatId);
@@ -443,7 +447,7 @@ export function createTradeMarketFeature(deps) {
 
   async function startSellFlow(ctx, slug, tokenId, side, meta = {}) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const translatedSide = await translateUiLabelForLanguage(language, side, 'sell flow side label');
 
@@ -551,7 +555,7 @@ export function createTradeMarketFeature(deps) {
 
   async function handleSellPercent(ctx, percent) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const state = userStates.get(chatId);
 
@@ -564,7 +568,7 @@ export function createTradeMarketFeature(deps) {
       Number.isNaN(percent)
     ) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       userStates.delete(chatId);
       return;
@@ -692,7 +696,7 @@ export function createTradeMarketFeature(deps) {
       safeLogError(ctxLog, error, { slug, tokenId, percent });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       userStates.delete(chatId);
     } finally {
@@ -702,7 +706,7 @@ export function createTradeMarketFeature(deps) {
 
   async function handleSellAmount(ctx, state, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     let sharesBase;
@@ -758,7 +762,7 @@ export function createTradeMarketFeature(deps) {
       safeLogError(ctxLog, error, { state });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.reply(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       userStates.delete(chatId);
     } finally {
@@ -768,13 +772,13 @@ export function createTradeMarketFeature(deps) {
 
   async function executeConfirmedSell(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     const state = userStates.get(chatId);
     if (!state || !state.sharesBase || !state.slug || !state.tokenId) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -814,12 +818,12 @@ export function createTradeMarketFeature(deps) {
 
         await ctx.editMessageText(
           t('order_executed', { orderId: orderIdDisplay }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru'), parse_mode: 'HTML' }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en'), parse_mode: 'HTML' }
         );
       } else {
         await ctx.editMessageText(
           t('error_order_failed', { message: getResultErrorMessage(result, t) }),
-          { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+          { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
         );
       }
     } catch (error) {
@@ -827,7 +831,7 @@ export function createTradeMarketFeature(deps) {
       safeLogError(ctxLog, error, { slug, tokenId, sharesBase: state.sharesBase.toString() });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
     } finally {
       userStates.delete(chatId);
@@ -837,7 +841,7 @@ export function createTradeMarketFeature(deps) {
 
   async function handleBuyPercent(ctx, percent) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const state = userStates.get(chatId);
 
@@ -850,7 +854,7 @@ export function createTradeMarketFeature(deps) {
       Number.isNaN(percent)
     ) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       userStates.delete(chatId);
       return;
@@ -881,7 +885,7 @@ export function createTradeMarketFeature(deps) {
       safeLogError(ctxLog, error, { slug: state.slug, tokenId: state.tokenId, percent });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       userStates.delete(chatId);
     } finally {

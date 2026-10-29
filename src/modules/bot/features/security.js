@@ -4,6 +4,7 @@ import { loadConfig, getPolygonRpcUrl } from '../../config.js';
 import { getTranslator } from '../../i18n.js';
 import { getDecryptedPrivateKey, getDecryptedL2Credentials, initializeWallet } from '../../auth.js';
 import { createContext, safeLogError, safeLogWarn } from '../../logger.js';
+import { getSettingsBottomKeyboard, getExportPkConfirmKeyboard } from '../ui/keyboards.js';
 import {
   initClient,
   initContracts,
@@ -142,7 +143,7 @@ export function createSecurityFeature(deps) {
   // Handle wallet initialization
   async function handleInitWallet(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
 
     // Set busy lock
     const chatId = ctx.chat.id;
@@ -154,7 +155,7 @@ export function createSecurityFeature(deps) {
       const result = await initializeWallet();
 
       await ctx.editMessageText(result.warning, {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
     } catch (error) {
       const ctxLog = createContext('bot', 'handleInitWallet');
@@ -170,11 +171,11 @@ export function createSecurityFeature(deps) {
   // Handle set allowances
   async function handleSetAllowances(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
 
     if (!config.walletAddress) {
-      await ctx.editMessageText(t('error_no_wallet'), {
-        reply_markup: new InlineKeyboard().text(t('back'), 'back_menu')
+      await ctx.reply(t('error_no_wallet'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
       return;
     }
@@ -184,7 +185,7 @@ export function createSecurityFeature(deps) {
     busyLocks.set(chatId, true);
 
     try {
-      await ctx.editMessageText(t('loading'));
+      await ctx.reply(t('loading'));
 
       // Initialize contracts
       const privateKey = await getDecryptedPrivateKey();
@@ -214,15 +215,15 @@ export function createSecurityFeature(deps) {
         text += `\n<i>${t('clob_allowance_unavailable')}</i>`;
       }
 
-      await ctx.editMessageText(text, {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru'),
+      await ctx.reply(text, {
+        reply_markup: getSettingsBottomKeyboard(),
         parse_mode: 'HTML'
       });
     } catch (error) {
       const ctxLog = createContext('bot', 'handleSetAllowances');
       safeLogError(ctxLog, error);
-      await ctx.editMessageText(t('error_generic'), {
-        reply_markup: new InlineKeyboard().text(t('try_again'), 'set_allowances').text(t('back'), 'back_menu')
+      await ctx.reply(t('error_generic'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
     } finally {
       busyLocks.delete(chatId);
@@ -232,7 +233,7 @@ export function createSecurityFeature(deps) {
   // Handle collateral status display
   async function handleCollateralStatus(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
 
     if (!config.walletAddress) {
       await ctx.editMessageText(t('error_no_wallet'), {
@@ -299,21 +300,15 @@ export function createSecurityFeature(deps) {
         text += `\n\n<i>${t('onchain_allowances_unavailable')}</i>`;
       }
 
-      const keyboard = new InlineKeyboard();
-      if (usdceBalanceBig > 0n) {
-        keyboard.text(t('collateral_wrap_action'), 'wrap_usdce_all').row();
-      }
-      keyboard.text(t('back'), 'settings');
-
-      await ctx.editMessageText(text, {
-        reply_markup: keyboard,
+      await ctx.reply(text, {
+        reply_markup: getSettingsBottomKeyboard(),
         parse_mode: 'HTML'
       });
     } catch (error) {
       const ctxLog = createContext('bot', 'handleCollateralStatus');
       safeLogError(ctxLog, error);
-      await ctx.editMessageText(t('error_generic'), {
-        reply_markup: new InlineKeyboard().text(t('try_again'), 'collateral_status').text(t('back'), 'settings')
+      await ctx.reply(t('error_generic'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
     } finally {
       busyLocks.delete(chatId);
@@ -322,11 +317,11 @@ export function createSecurityFeature(deps) {
 
   async function handleWrapAllUsdce(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
 
     if (!config.walletAddress) {
-      await ctx.editMessageText(t('error_no_wallet'), {
-        reply_markup: new InlineKeyboard().text(t('back'), 'settings')
+      await ctx.reply(t('error_no_wallet'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
       return;
     }
@@ -335,7 +330,7 @@ export function createSecurityFeature(deps) {
     busyLocks.set(chatId, true);
 
     try {
-      await ctx.editMessageText(t('loading'));
+      await ctx.reply(t('loading'));
 
       const privateKey = await getDecryptedPrivateKey();
       const signer = new Wallet(privateKey);
@@ -345,8 +340,8 @@ export function createSecurityFeature(deps) {
       const { usdceBalance } = await getCollateralStatus();
       const amountBase = BigInt(usdceBalance || '0');
       if (amountBase <= 0n) {
-        await ctx.editMessageText(t('collateral_wrap_unavailable'), {
-          reply_markup: new InlineKeyboard().text(t('back'), 'settings')
+        await ctx.reply(t('collateral_wrap_unavailable'), {
+          reply_markup: getSettingsBottomKeyboard()
         });
         return;
       }
@@ -355,25 +350,19 @@ export function createSecurityFeature(deps) {
       const hashDisplay = formatTxHashLink
         ? formatTxHashLink(receipt.hash)
         : escapeHtml(String(receipt.hash || t('unknown')));
-      await ctx.editMessageText(t('collateral_wrap_success', {
+      await ctx.reply(t('collateral_wrap_success', {
         amount: formatUSDCFromBase(amountBase),
         hash: hashDisplay
       }), {
-        reply_markup: new InlineKeyboard()
-          .text(t('refresh'), 'collateral_status')
-          .row()
-          .text(t('back'), 'settings'),
+        reply_markup: getSettingsBottomKeyboard(),
         parse_mode: 'HTML'
       });
     } catch (error) {
       const ctxLog = createContext('bot', 'handleWrapAllUsdce');
       safeLogError(ctxLog, error);
       const message = String(error?.message || t('error_generic')).slice(0, 220);
-      await ctx.editMessageText(t('error_order_failed', { message }), {
-        reply_markup: new InlineKeyboard()
-          .text(t('refresh'), 'collateral_status')
-          .row()
-          .text(t('back'), 'settings')
+      await ctx.reply(t('error_order_failed', { message }), {
+        reply_markup: getSettingsBottomKeyboard()
       });
     } finally {
       busyLocks.delete(chatId);
@@ -383,33 +372,41 @@ export function createSecurityFeature(deps) {
   // Handle start export private key flow
   async function handleStartExportPk(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
+    const chatId = ctx.chat.id;
 
     // Check if wallet is configured
     if (!config.walletAddress) {
-      await ctx.editMessageText(t('export_pk_wallet_missing'), {
-        reply_markup: new InlineKeyboard().text(t('back'), 'settings')
+      await ctx.reply(t('export_pk_wallet_missing'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
       return;
     }
 
-    // Show warning and ask for confirmation
-    const keyboard = new InlineKeyboard()
-      .text(t('export_pk_confirm'), 'confirm_export_pk')
-      .text(t('export_pk_cancel'), 'cancel_export_pk');
+    userStates.set(chatId, {
+      state: 'AWAITING_EXPORT_CONFIRMATION'
+    });
 
-    await ctx.editMessageText(t('export_pk_warning'), { reply_markup: keyboard });
+    const text =
+      `⚠️ <b>${t('export_pk_warning_title') || 'EXPORT PRIVATE KEY WARNING'}</b>\n\n` +
+      `Never share your private key with anyone! Anyone with your private key has complete control of all funds.\n\n` +
+      `👉 <b>Tap the button below to confirm export:</b>`;
+
+    await ctx.reply(text, {
+      reply_markup: getExportPkConfirmKeyboard(),
+      parse_mode: 'HTML'
+    });
   }
 
   // Handle confirm export private key (after warning)
   async function handleConfirmExportPk(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     // Check busy lock
     if (busyLocks.get(chatId)) {
-      await ctx.answerCallbackQuery(t('error_busy'));
+      if (ctx.callbackQuery) await ctx.answerCallbackQuery(t('error_busy'));
       return;
     }
 
@@ -419,21 +416,20 @@ export function createSecurityFeature(deps) {
     try {
       // Set state to await explicit confirmation text
       userStates.set(chatId, {
-        state: 'AWAITING_EXPORT_CONFIRMATION',
-        warningMessageId: ctx.callbackQuery.message.message_id
+        state: 'AWAITING_EXPORT_CONFIRMATION'
       });
 
-      // Ask for confirmation word
-      await ctx.editMessageText(t('export_pk_enter_password'), {
-        reply_markup: new InlineKeyboard().text(t('cancel'), 'cancel_export_pk')
+      await ctx.reply(`👉 <b>Tap the button below to confirm:</b>`, {
+        reply_markup: getExportPkConfirmKeyboard(),
+        parse_mode: 'HTML'
       });
     } catch (error) {
       const ctxLog = createContext('bot', 'handleConfirmExportPk');
       safeLogError(ctxLog, error);
       busyLocks.delete(chatId);
       userStates.delete(chatId);
-      await ctx.editMessageText(t('error_generic'), {
-        reply_markup: new InlineKeyboard().text(t('back'), 'settings')
+      await ctx.reply(t('error_generic'), {
+        reply_markup: getSettingsBottomKeyboard()
       });
     }
   }
@@ -441,41 +437,42 @@ export function createSecurityFeature(deps) {
   // Handle cancel export private key
   async function handleCancelExportPk(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     // Clear state
     userStates.delete(chatId);
     busyLocks.delete(chatId);
 
-    await ctx.editMessageText(t('cancelled'), {
-      reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+    await ctx.reply(t('cancelled'), {
+      reply_markup: getSettingsBottomKeyboard()
     });
   }
 
   // Handle confirmation input for export
   async function handleExportConfirmation(ctx, state, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
-    // Delete the user's confirmation message immediately for security
+    // Delete the user's confirmation message immediately for security if it's a typed message
     try {
-      await ctx.api.deleteMessage(chatId, ctx.message.message_id);
+      if (ctx.message?.message_id) {
+        await ctx.api.deleteMessage(chatId, ctx.message.message_id);
+      }
     } catch (deleteError) {
-      // Log but continue - message might already be deleted
       const ctxLog = createContext('bot', 'handleExportConfirmation');
       safeLogWarn(ctxLog, 'Failed to delete confirmation message', { error: deleteError.message });
     }
 
     try {
-      const confirmationText = String(text || '').trim();
-      if (confirmationText !== 'confirm') {
+      const confirmationText = String(text || '').trim().toLowerCase();
+      if (!confirmationText.includes('confirm')) {
         userStates.delete(chatId);
         busyLocks.delete(chatId);
 
         await ctx.reply(t('export_pk_invalid_password'), {
-          reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+          reply_markup: getSettingsBottomKeyboard()
         });
         return;
       }
@@ -486,7 +483,10 @@ export function createSecurityFeature(deps) {
       const messageText = t('export_pk_sent_will_delete', { privateKey });
       
       // Send the private key message
-      const sentMessage = await ctx.reply(messageText, { parse_mode: 'HTML' });
+      const sentMessage = await ctx.reply(messageText, {
+        reply_markup: getSettingsBottomKeyboard(),
+        parse_mode: 'HTML'
+      });
 
       // Clear state and busy lock
       userStates.delete(chatId);
@@ -503,7 +503,7 @@ export function createSecurityFeature(deps) {
       }, 90000);
 
       // Also try to delete the warning/prompt messages
-      if (state.warningMessageId) {
+      if (state?.warningMessageId) {
         setTimeout(async () => {
           try {
             await ctx.api.deleteMessage(chatId, state.warningMessageId);
@@ -521,7 +521,7 @@ export function createSecurityFeature(deps) {
       busyLocks.delete(chatId);
       
       await ctx.reply(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: getSettingsBottomKeyboard()
       });
     }
   }

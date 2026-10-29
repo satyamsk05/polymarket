@@ -395,36 +395,35 @@ export async function retry(fn, maxAttempts = 3, baseDelay = 1000) {
 export function formatError(error, language = 'en') {
   const msg = String(error?.message || '');
   const lower = msg.toLowerCase();
-  const ru = language === 'ru';
 
   if (lower.includes('insufficient')) {
     return {
-      title: ru ? 'Недостаточно средств' : 'Insufficient funds',
-      message: ru ? 'Недостаточно баланса для выполнения операции.' : 'Not enough balance to complete the operation.',
-      action: ru ? 'Пополните баланс и повторите.' : 'Top up balance and try again.'
+      title: 'Insufficient funds',
+      message: 'Not enough balance to complete the operation.',
+      action: 'Top up balance and try again.'
     };
   }
 
   if (lower.includes('allowance') || lower.includes('approval')) {
     return {
-      title: ru ? 'Недостаточно разрешений' : 'Insufficient allowance',
-      message: ru ? 'Нужно обновить allowances для торговли.' : 'Trading allowances must be refreshed.',
-      action: ru ? 'Откройте Settings -> Set Allowances.' : 'Open Settings -> Set Allowances.'
+      title: 'Insufficient allowance',
+      message: 'Trading allowances must be refreshed.',
+      action: 'Open Settings -> Set Allowances.'
     };
   }
 
   if (lower.includes('rate limit') || lower.includes('429')) {
     return {
-      title: ru ? 'Слишком много запросов' : 'Rate limited',
-      message: ru ? 'API временно ограничил запросы.' : 'API temporarily rate-limited requests.',
-      action: ru ? 'Подождите и повторите.' : 'Wait and retry.'
+      title: 'Rate limited',
+      message: 'API temporarily rate-limited requests.',
+      action: 'Wait and retry.'
     };
   }
 
   return {
-    title: ru ? 'Ошибка' : 'Error',
-    message: msg || (ru ? 'Произошла непредвиденная ошибка.' : 'Unexpected error occurred.'),
-    action: ru ? 'Повторите действие позже.' : 'Retry later.'
+    title: 'Error',
+    message: msg || 'Unexpected error occurred.',
+    action: 'Retry later.'
   };
 }
 

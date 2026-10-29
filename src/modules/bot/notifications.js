@@ -53,7 +53,7 @@ export function createNotificationsFeature(deps) {
     if (!chatId) return;
 
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
 
     const market = String(payload.market ?? payload.marketId ?? t('unknown')).trim() || t('unknown');
     const side = localizeOutcomeLabel(payload.side, t);
@@ -102,7 +102,7 @@ export function createNotificationsFeature(deps) {
     if (!chatId) return;
 
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
 
     const marketLabel = truncateNotificationMarketLabel(
       payload.market ?? payload.question ?? payload.marketId,

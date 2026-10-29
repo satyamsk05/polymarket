@@ -22,11 +22,27 @@ const DEFAULT_CONFIG = {
     }
   },
   walletAddress: '',
-  language: '',
+  language: 'en',
   strategies: {
     stopLoss: -10,
     takeProfit: 30,
     maxAskPrice: 0.49
+  },
+  splitSellStrategy: {
+    enabled: true,
+    paperMode: true,
+    splitSizeUsd: 10,
+    entryWindowMinSec: 60,
+    entryWindowMaxSec: 120,
+    minFavouritePrice: 0.75,
+    requireBinanceConfirm: true,
+    sellMode: 'limit',
+    sellTimeoutSec: 20,
+    maxSpread: 0.03,
+    maxRoundsPerDay: 30,
+    dailyLossLimitUsd: 50,
+    maxConsecutiveLosses: 3,
+    symbols: ['BTC', 'ETH']
   },
   notifications: {
     priceChangePercent: 10,
@@ -74,26 +90,36 @@ export async function ensureConfigFileExists() {
 
 // Load configuration from file
 export async function loadConfig() {
+  let config;
   try {
     await ensureDataDir();
     const data = await readFile(CONFIG_PATH, 'utf8');
-    const config = JSON.parse(data);
-    
-    // Return config even if wallet is not configured
-    // Language selection should work before wallet initialization
-    return config;
+    config = JSON.parse(data);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      // Config file doesn't exist, return default
       const ctx = createContext('config', 'loadConfig');
       safeLogInfo(ctx, 'Config file not found, using defaults');
-      return { ...DEFAULT_CONFIG };
-    }
-    if (error instanceof SyntaxError) {
+      config = { ...DEFAULT_CONFIG };
+    } else if (error instanceof SyntaxError) {
       throw new Error(`Config file is corrupted JSON: ${error.message}`);
+    } else {
+      throw error;
     }
-    throw error;
   }
+
+  try {
+    const { getCurrentUserStore } = await import('./userManager.js');
+    const store = getCurrentUserStore();
+    if (store && store.walletAddress) {
+      return {
+        ...config,
+        walletAddress: store.walletAddress,
+        language: store.language || config.language || 'en'
+      };
+    }
+  } catch {}
+
+  return config;
 }
 
 async function fsyncFile(path) {

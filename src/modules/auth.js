@@ -221,20 +221,28 @@ export async function initializeWallet() {
   // 7. Return wallet info for display
   return {
     address,
-    warning: `⚠️ ВНИМАНИЕ!
-Создан новый кошелёк для Polymarket.
-Адрес: ${address}
+    warning: `⚠️ WARNING!
+A new wallet for Polymarket has been created.
+Address: ${address}
 
-ЭТО НОВЫЙ КОШЕЛЁК. Пополните его отдельно.
-НЕ ИСПОЛЬЗУЙТЕ ваш основной кошелёк!
+THIS IS A NEW WALLET. Fund it separately.
+DO NOT USE your main wallet!
 
-Экспортируйте и сохраните приватный ключ (Настройки → Экспорт ключа).
-При переустановке ОС или переносе на новое устройство доступ к кошельку может быть потерян.`
+Export and back up your private key (Settings → Export Key).
+If the OS is reinstalled or the bot is moved to a new device, access to the wallet may be lost.`
   };
 }
 
 // Get decrypted private key (moved from config.js to keep config module clean)
 export async function getDecryptedPrivateKey() {
+  try {
+    const { getCurrentUserStore } = await import('./userManager.js');
+    const store = getCurrentUserStore();
+    if (store && store.privateKey) {
+      return store.privateKey;
+    }
+  } catch {}
+
   const { loadConfig } = await import('./config.js');
   const config = await loadConfig();
   
@@ -248,6 +256,19 @@ export async function getDecryptedPrivateKey() {
 
 // Get decrypted L2 credentials (moved from config.js to keep config module clean)
 export async function getDecryptedL2Credentials() {
+  try {
+    const { getCurrentUserStore } = await import('./userManager.js');
+    const store = getCurrentUserStore();
+    if (store && store.creds) {
+      return {
+        key: store.creds.apiKey || store.creds.key,
+        apiKey: store.creds.apiKey || store.creds.key,
+        secret: store.creds.secret,
+        passphrase: store.creds.passphrase
+      };
+    }
+  } catch {}
+
   const { loadConfig } = await import('./config.js');
   const config = await loadConfig();
   

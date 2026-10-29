@@ -108,7 +108,7 @@ export function createTradeLimitFeature(deps) {
 
   async function startLimitFlow(ctx, slug, tokenId, sideLabel, tradeSide) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (!config.walletAddress) {
@@ -243,7 +243,7 @@ export function createTradeLimitFeature(deps) {
 
   async function handleLimitAmount(ctx, state, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const amountMode = state.limitAmountMode || (state.tradeSide === 'sell' ? 'shares' : 'usdc');
     if (amountMode === 'shares') {
       let sharesBase;
@@ -445,7 +445,7 @@ export function createTradeLimitFeature(deps) {
 
   async function handleLimitPrice(ctx, state, text) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     let priceMicro;
     try {
       priceMicro = parsePriceToMicro(text.replace(',', '.'));
@@ -467,7 +467,7 @@ export function createTradeLimitFeature(deps) {
 
   async function handleLimitBuyPercent(ctx, percent) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const state = userStates.get(chatId);
 
@@ -478,7 +478,7 @@ export function createTradeLimitFeature(deps) {
       Number.isNaN(percent)
     ) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -519,7 +519,7 @@ export function createTradeLimitFeature(deps) {
 
   async function handleLimitSellPercent(ctx, percent) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const state = userStates.get(chatId);
 
@@ -530,7 +530,7 @@ export function createTradeLimitFeature(deps) {
       Number.isNaN(percent)
     ) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -615,13 +615,13 @@ export function createTradeLimitFeature(deps) {
 
   async function handleLimitPricePreset(ctx, preset) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const state = userStates.get(chatId);
 
     if (!state || state.state !== 'AWAITING_LIMIT_PRICE') {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -653,7 +653,7 @@ export function createTradeLimitFeature(deps) {
 
   async function executeConfirmedLimit(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
     const state = userStates.get(chatId);
 
@@ -667,7 +667,7 @@ export function createTradeLimitFeature(deps) {
       !state.tradeSide
     ) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -679,14 +679,14 @@ export function createTradeLimitFeature(deps) {
       priceMicro = BigInt(state.priceMicro?.toString?.() ?? state.priceMicro);
     } catch {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
 
     if (sharesBase <= 0n || priceMicro <= 0n || priceMicro >= 1_000_000n) {
       await ctx.editMessageText(t('error_generic'), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
       return;
     }
@@ -694,7 +694,7 @@ export function createTradeLimitFeature(deps) {
     if (sharesBase < MIN_LIMIT_ORDER_SHARES_BASE) {
       await ctx.editMessageText(
         t('limit_min_size', { min: formatSharesFromBase(MIN_LIMIT_ORDER_SHARES_BASE) }),
-        { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+        { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
       );
       return;
     }
@@ -735,7 +735,7 @@ export function createTradeLimitFeature(deps) {
           action: state.tradeSide === 'buy' ? t('buy') : t('sell'),
           side: state.sideLabel || t('unknown')
         }),
-        { reply_markup: await getMainMenuKeyboard(config.language || 'ru') }
+        { reply_markup: await getMainMenuKeyboard(config.language || 'en') }
       );
     } catch (error) {
       const ctxLog = createContext('bot', 'executeConfirmedLimit');
@@ -745,7 +745,7 @@ export function createTradeLimitFeature(deps) {
       });
       const errorInfo = mapErrorToUserMessage(error);
       await ctx.editMessageText(t(errorInfo.key, errorInfo.params), {
-        reply_markup: await getMainMenuKeyboard(config.language || 'ru')
+        reply_markup: await getMainMenuKeyboard(config.language || 'en')
       });
     } finally {
       userStates.delete(chatId);

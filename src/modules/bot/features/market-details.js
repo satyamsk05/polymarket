@@ -35,7 +35,7 @@ export function createMarketDetailsFeature(deps) {
   // Show event details with submarkets
   async function showEventDetails(ctx, eventRef, nav = {}) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const chatId = ctx.chat.id;
     const categoryToken = nav.categoryToken || CATEGORY_ALL_KEY;
@@ -183,7 +183,7 @@ export function createMarketDetailsFeature(deps) {
 
   async function showMarketDetails(ctx, marketRef, nav = {}) {
     const config = await loadConfig();
-    const language = config.language || 'ru';
+    const language = config.language || 'en';
     const t = await getTranslator(language);
     const chatId = ctx.chat.id;
     const backCallback = nav.backCallback || 'markets:1';
@@ -193,26 +193,36 @@ export function createMarketDetailsFeature(deps) {
     
     try {
       let market;
-      try {
-        // getMarketDetails now works without initialized clobClient (uses Gamma API)
-        market = await getMarketDetails(marketRef);
-      } catch (error) {
-        const canUseCachedMarket =
-          error?.status === 404 &&
-          marketRef &&
-          typeof marketRef === 'object' &&
-          (marketRef.question || marketRef.title || marketRef.conditionId);
+      const isCompleteMarket =
+        marketRef &&
+        typeof marketRef === 'object' &&
+        marketRef.conditionId &&
+        (marketRef.clobTokenIds || marketRef.tokens);
 
-        if (!canUseCachedMarket) {
-          throw error;
-        }
-
-        const ctxLog = createContext('bot', 'showMarketDetails');
-        safeLogWarn(ctxLog, 'Market lookup returned 404, using cached market payload', {
-          slug: marketRef.slug,
-          id: marketRef.id
-        });
+      if (isCompleteMarket) {
         market = marketRef;
+      } else {
+        try {
+          // getMarketDetails now works without initialized clobClient (uses Gamma API)
+          market = await getMarketDetails(marketRef);
+        } catch (error) {
+          const canUseCachedMarket =
+            marketRef &&
+            typeof marketRef === 'object' &&
+            (marketRef.question || marketRef.title || marketRef.conditionId);
+
+          if (!canUseCachedMarket) {
+            throw error;
+          }
+
+          const ctxLog = createContext('bot', 'showMarketDetails');
+          safeLogWarn(ctxLog, 'Market lookup failed, using cached market payload', {
+            slug: marketRef.slug,
+            id: marketRef.id,
+            error: error?.message || String(error)
+          });
+          market = marketRef;
+        }
       }
 
       const marketKey = getMarketRefValue(marketRef, market);
@@ -226,18 +236,29 @@ export function createMarketDetailsFeature(deps) {
         timestamp: Date.now()
       });
       
-      // Parse clobTokenIds and outcomes from market data
-      let clobTokenIds = [];
-      let outcomes = [];
-      try {
-        if (market.clobTokenIds) {
-          clobTokenIds = JSON.parse(market.clobTokenIds);
+      // Parse clobTokenIds and outcomes safely from market data
+      const parseArraySafely = (val) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string' && val.trim()) {
+          try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (_) {}
         }
-        if (market.outcomes) {
-          outcomes = JSON.parse(market.outcomes);
-        }
-      } catch (e) {
-        // Keep empty arrays if parsing fails
+        return [];
+      };
+
+      let clobTokenIds = parseArraySafely(market.clobTokenIds);
+      if (clobTokenIds.length === 0 && Array.isArray(market.tokens)) {
+        clobTokenIds = market.tokens.map((t) => t.token_id || t.tokenId).filter(Boolean);
+      }
+
+      let outcomes = parseArraySafely(market.outcomes);
+      if (outcomes.length === 0 && Array.isArray(market.tokens)) {
+        outcomes = market.tokens.map((t) => t.outcome).filter(Boolean);
+      }
+      if (outcomes.length === 0) {
+        outcomes = ['Up', 'Down'];
       }
       
       // Cache market data if we have tokens
@@ -279,14 +300,10 @@ export function createMarketDetailsFeature(deps) {
       }
       const question = market.question || market.title || t('unknown');
       
-      // Parse outcomePrices from JSON strings
-      let outcomePrices = [];
-      try {
-        if (market.outcomePrices) {
-          outcomePrices = JSON.parse(market.outcomePrices);
-        }
-      } catch (e) {
-        // Keep empty array if parsing fails
+      // Parse outcomePrices safely
+      let outcomePrices = parseArraySafely(market.outcomePrices);
+      if (outcomePrices.length === 0 && Array.isArray(market.tokens)) {
+        outcomePrices = market.tokens.map((t) => t.price).filter(Boolean);
       }
       
       // Handle volume - can be missing or in different formats
@@ -340,29 +357,39 @@ export function createMarketDetailsFeature(deps) {
       // Construct Polymarket URL using market slug
       const marketUrl = `https://polymarket.com/event/${market.slug}/${market.slug}`;
       
+      const isUpDown = /up|down/i.test(firstOutcome) || /up|down/i.test(secondOutcome) || /up or down|updown/i.test(question);
+      const firstLabel = isUpDown ? 'UP' : firstOutcome;
+      const secondLabel = isUpDown ? 'DOWN' : secondOutcome;
+      const firstBadge = isUpDown ? '🟢' : '🔹';
+      const secondBadge = isUpDown ? '🔴' : '🔸';
+
       const text = `<b>${t('market_question')}:</b> ${escapeHtml(translatedQuestion || question)}\n\n` +
                    `<b>${t('market_volume')}:</b> ${volume}\n` +
                    `<b>${t('market_liquidity')}:</b> ${liquidity}\n` +
                    `<b>${t('market_end_date')}:</b> ${endDate}\n` +
                    `${status}\n\n` +
-                   `<b>${escapeHtml(firstOutcome)}:</b> ${displayFirstPrice}\n` +
-                   `<b>${escapeHtml(secondOutcome)}:</b> ${displaySecondPrice}\n\n` +
+                   `${firstBadge} <b>${escapeHtml(firstLabel)}:</b> ${displayFirstPrice}\n` +
+                   `${secondBadge} <b>${escapeHtml(secondLabel)}:</b> ${displaySecondPrice}\n\n` +
                    `Link: <a href="${marketUrl}">Polymarket</a>`;
       
       const keyboard = new InlineKeyboard();
       
-      // First choose action type, then outcome on the next step.
       if (!market.resolved && clobTokenIds.length >= 2) {
-        keyboard.text(getActionLabel('mb', t), 'ma:mb').text(getActionLabel('ms', t), 'ma:ms').row();
-        keyboard.text(getActionLabel('lb', t), 'ma:lb').text(getActionLabel('ls', t), 'ma:ls').row();
+        keyboard.text(`🟢 Buy ${firstLabel}`, 'mo:mb:0').text(`🔴 Buy ${secondLabel}`, 'mo:mb:1').row();
+        keyboard.text(`📊 Limit ${firstLabel}`, 'mo:lb:0').text(`📊 Limit ${secondLabel}`, 'mo:lb:1').row();
+        keyboard.text(`💰 Sell ${firstLabel}`, 'mo:ms:0').text(`💰 Sell ${secondLabel}`, 'mo:ms:1').row();
         if (market.conditionId) {
           keyboard.text(t('strategy_start'), 'mkt_strategy').row();
           keyboard.text(t('split'), 'mkt_split').text(t('merge'), 'mkt_merge').row();
         }
       }
-      keyboard.text(t('back'), backCallback);
+      keyboard.text(t('refresh'), retryCallback).text(t('back'), backCallback);
       
-      await ctx.editMessageText(text, { reply_markup: keyboard, parse_mode: 'HTML' });
+      await ctx.editMessageText(text, {
+        reply_markup: keyboard,
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true }
+      });
     } catch (error) {
       const ctxLog = createContext('bot', 'showMarketDetails');
       safeLogError(ctxLog, error, { marketRef: getMarketRefValue(marketRef), nav });

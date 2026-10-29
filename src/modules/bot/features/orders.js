@@ -25,7 +25,7 @@ export function createOrdersFeature(deps) {
 
   async function showOrders(ctx) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     
     // Check if wallet is configured
     if (!config.walletAddress) {
@@ -121,7 +121,7 @@ export function createOrdersFeature(deps) {
 
   async function showOrderDetailsFromCache(ctx, index) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (Number.isNaN(index) || index < 0) {
@@ -182,7 +182,7 @@ export function createOrdersFeature(deps) {
 
   async function cancelCachedOrder(ctx, index) {
     const config = await loadConfig();
-    const t = await getTranslator(config.language || 'ru');
+    const t = await getTranslator(config.language || 'en');
     const chatId = ctx.chat.id;
 
     if (Number.isNaN(index) || index < 0) {
