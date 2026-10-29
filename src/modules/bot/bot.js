@@ -140,6 +140,7 @@ import { createMarketDetailsFeature } from './features/market-details.js';
 import { createPositionsFeature } from './features/positions.js';
 import { createOrdersFeature } from './features/orders.js';
 import { createQuickBetFeature } from './features/quick-bet.js';
+import { createTrendFeature } from './features/trend.js';
 import { createSecurityFeature } from './features/security.js';
 import { createSettingsFeature } from './features/settings.js';
 import { createWithdrawFeature } from './features/withdraw.js';
@@ -199,6 +200,11 @@ export async function initBot(token, allowedUserIdParam) {
   bot.command('start', async (ctx) => {
     await handleStart(ctx);
   });
+
+  // /trend command
+  bot.command('trend', async (ctx) => {
+    await showTrend(ctx);
+  });
   
   // Callback handlers
   bot.on('callback_query:data', async (ctx) => {
@@ -239,7 +245,7 @@ async function handleStart(ctx) {
   if (store?.isNew) {
     let newMsg = `🎉 <b>Welcome to Polymarket Bot!</b>\n\n` +
                  `Your dedicated Polymarket wallet has been generated:\n` +
-                 `<code>${store.walletAddress}</code> (User ${store.userNumber || ''}/${MAX_USERS})\n\n` +
+                 `<code>${store.walletAddress}</code>\n\n` +
                  `⚠️ <b>Quick Setup Guide:</b>\n` +
                  `1. Deposit Polygon <b>POL</b> (for gas fees) and <b>USDC</b> into this address.\n` +
                  `2. Go to <b>⚙️ Settings</b> and tap <b>🔑 Set Allowances</b>.\n` +
@@ -318,6 +324,7 @@ const handleCallback = createHandleCallbackRouter({
   handleQuickBetAmount,
   handleQuickBetCoin,
   handleQuickBetExecute,
+  showTrend,
   cancelCachedOrder,
   executeConfirmedSplit,
   executeConfirmedMerge,
@@ -466,6 +473,10 @@ const {
 } = createQuickBetFeature({
   ensureClientInitialized
 });
+
+const {
+  showTrend: showTrendFeature
+} = createTrendFeature();
 
 const {
   handleInitWallet: handleInitWalletFeature,
@@ -649,6 +660,7 @@ const handleTextMessage = createHandleTextMessageRouter({
   getMainMenuKeyboard,
   getPersistentBottomKeyboard,
   showQuickBet,
+  showTrend,
   showMarketsList,
   showPositions,
   showOrders,
@@ -2568,6 +2580,10 @@ async function handleQuickBetCoin(ctx, coin) {
 
 async function handleQuickBetExecute(ctx, side, customAmount = null, customCoin = null) {
   await handleExecuteQuickBetFeature(ctx, side, customAmount, customCoin);
+}
+
+async function showTrend(ctx, coin = 'BTC', isEdit = false) {
+  await showTrendFeature(ctx, coin, isEdit);
 }
 
 async function handleShowBalance(ctx) {

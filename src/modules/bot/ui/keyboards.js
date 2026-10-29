@@ -16,6 +16,7 @@ export function getPersistentBottomKeyboard() {
     .text('💼 Positions')
     .text('📋 Orders')
     .row()
+    .text('📈 Trend')
     .text('⚙️ Settings')
     .resized();
 }

@@ -67,6 +67,7 @@ test('getPersistentBottomKeyboard creates clean bottom layout without old strate
   assert.match(json, /Balance/);
   assert.match(json, /Positions/);
   assert.match(json, /Orders/);
+  assert.match(json, /Trend/);
   assert.match(json, /Settings/);
   assert.equal(json.includes('Split & Sell'), false);
   assert.equal(json.includes('5M UpDown'), false);

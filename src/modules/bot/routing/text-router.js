@@ -29,6 +29,7 @@ export function createHandleTextMessageRouter(deps) {
     getMainMenuKeyboard,
     getPersistentBottomKeyboard,
     showQuickBet,
+    showTrend,
     showMarketsList,
     showPositions,
     showOrders,
@@ -160,6 +161,11 @@ export function createHandleTextMessageRouter(deps) {
       userStates.delete(chatId);
       normalizeCtx(ctx);
       if (showQuickBet) return await showQuickBet(ctx);
+    }
+    if (norm.includes('Trend') || norm.toLowerCase() === '/trend') {
+      userStates.delete(chatId);
+      normalizeCtx(ctx);
+      if (showTrend) return await showTrend(ctx);
     }
     if (norm.includes('Balance')) {
       userStates.delete(chatId);

@@ -59,6 +59,7 @@ export function createHandleCallbackRouter(deps) {
     handleQuickBetAmount,
     handleQuickBetCoin,
     handleQuickBetExecute,
+    showTrend,
     cancelCachedOrder,
     executeConfirmedSplit,
     executeConfirmedMerge,
@@ -485,6 +486,16 @@ export function createHandleCallbackRouter(deps) {
         await showOrders(ctx);
       } else if (data === 'quick_bet') {
         await showQuickBet(ctx);
+      } else if (data === 'trend' || data.startsWith('trend:')) {
+        if (data.startsWith('trend:coin:')) {
+          const coin = data.split(':')[2] || 'BTC';
+          await showTrend(ctx, coin, true);
+        } else if (data.startsWith('trend:refresh:')) {
+          const coin = data.split(':')[2] || 'BTC';
+          await showTrend(ctx, coin, true);
+        } else {
+          await showTrend(ctx, 'BTC', false);
+        }
       } else if (data.startsWith('qb_amt:')) {
         const amt = parseFloat(data.split(':')[1]);
         await handleQuickBetAmount(ctx, amt);
