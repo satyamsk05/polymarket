@@ -17,8 +17,7 @@ export function getPersistentBottomKeyboard() {
     .text('📋 Orders')
     .row()
     .text('⚙️ Settings')
-    .resized()
-    .persistent();
+    .resized();
 }
 
 // 1-Click Bet: Step 1 (Amount selection in bottom keyboard)
@@ -34,8 +33,7 @@ export function getQuickBetAmountKeyboard(coin = 'BTC') {
     .text('🔄 Refresh')
     .row()
     .text('⬅️ Back to Menu')
-    .resized()
-    .persistent();
+    .resized();
 }
 
 // 1-Click Bet: Step 2 (Direction selection in bottom keyboard)
@@ -46,8 +44,7 @@ export function getQuickBetDirectionKeyboard(amount, coin = 'BTC') {
     .row()
     .text('⬅️ Change Amount')
     .text('🏠 Main Menu')
-    .resized()
-    .persistent();
+    .resized();
 }
 
 // Settings bottom keyboard
@@ -63,8 +60,7 @@ export function getSettingsBottomKeyboard() {
     .row()
     .text('🔐 Export Private Key')
     .text('⬅️ Back to Menu')
-    .resized()
-    .persistent();
+    .resized();
 }
 
 // Export PK confirmation bottom keyboard
@@ -73,16 +69,14 @@ export function getExportPkConfirmKeyboard() {
     .text('⚠️ CONFIRM EXPORT')
     .row()
     .text('⬅️ Back to Settings')
-    .resized()
-    .persistent();
+    .resized();
 }
 
 // Withdraw flow cancel bottom keyboard
 export function getWithdrawCancelKeyboard() {
   return new Keyboard()
     .text('⬅️ Back to Settings')
-    .resized()
-    .persistent();
+    .resized();
 }
 
 export async function getMainMenuKeyboard(lang) {
