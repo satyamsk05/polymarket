@@ -1780,6 +1780,21 @@ export async function getPositions(userAddress, options = {}) {
   return fallback;
 }
 
+// Get single order by ID - REQUIRES clobClient
+export async function getOrder(orderId) {
+  const client = getEffectiveClobClient();
+  if (!client) {
+    throw new Error('CLOB client not initialized. Call initClient() first.');
+  }
+
+  const cleanId = toNonEmptyString(orderId);
+  if (!cleanId) {
+    throw new Error('orderId is required');
+  }
+
+  return await client.getOrder(cleanId);
+}
+
 // Get user orders - REQUIRES clobClient
 export async function getOrders(address) {
   const client = getEffectiveClobClient();

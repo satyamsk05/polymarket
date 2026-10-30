@@ -4,6 +4,7 @@ import { createContext, safeLogError } from '../../logger.js';
 import { mapErrorToUserMessage } from '../../polymarket.js';
 import { busyLocks, userStates } from '../runtime.js';
 import { parseQuickBetTextCommand } from '../features/quick-bet.js';
+import { parseLiveBracketCommand } from '../features/bracket-order.js';
 
 function normalizeCtx(ctx) {
   if (!ctx.callbackQuery && !ctx._normalized) {
@@ -39,6 +40,7 @@ export function createHandleTextMessageRouter(deps) {
     handleQuickBetAmount,
     handleQuickBetCoin,
     handleQuickBetExecute,
+    handleLiveBracketOrder,
     handleSetAllowances,
     handleCollateralStatus,
     handleWrapAllUsdce,
@@ -95,6 +97,15 @@ export function createHandleTextMessageRouter(deps) {
     if (norm.includes('Change Amount') || norm === '🔄 Refresh') {
       userStates.delete(chatId);
       if (showQuickBet) return await showQuickBet(ctx);
+    }
+
+    // Live Round Scalp (Bracket Order) Shortcut (e.g. "up 2 2 3", "down 5 45 50", "up 2 2 3 eth")
+    const bracketCmd = parseLiveBracketCommand(norm);
+    if (bracketCmd) {
+      userStates.delete(chatId);
+      if (handleLiveBracketOrder) {
+        return await handleLiveBracketOrder(ctx, bracketCmd);
+      }
     }
 
     // Direct Quick Bet Text Shortcut (e.g. "50 up", "30 down", "50up", "30down", "50 up eth")

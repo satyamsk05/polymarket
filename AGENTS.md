@@ -398,6 +398,7 @@
 │       │   ├── constants.js
 │       │   ├── contract-snapshot.md
 │       │   ├── features/
+│       │   │   ├── bracket-order.js
 │       │   │   ├── language.js
 │       │   │   ├── market-details.js
 │       │   │   ├── markets.js
@@ -471,6 +472,7 @@
 - `src/modules/bot/bot.js` — main Telegram bot composition and large legacy/aggregated handlers.
 - `src/modules/bot/constants.js` — bot-specific constants.
 - `src/modules/bot/contract-snapshot.md` — contract-related notes snapshot.
+- `src/modules/bot/features/bracket-order.js` — live 5M round scalping/bracket order execution with auto-sell take profit.
 - `src/modules/bot/features/language.js` — language selection/settings feature.
 - `src/modules/bot/features/market-details.js` — event/market details rendering.
 - `src/modules/bot/features/markets.js` — categories/events/markets browsing and strategy-markets listing.
@@ -491,6 +493,7 @@
 - `src/modules/bot/ui/keyboards.js` — keyboard builders.
 - `tests/run-tests.js` — test launcher/helper file.
 - `tests/unit/auth-crypto.test.js` — auth crypto tests.
+- `tests/unit/bracket-order.test.js` — live bracket limit and auto-sell tests.
 - `tests/unit/config-runtime.test.js` — config runtime tests.
 - `tests/unit/formatters.test.js` — formatter tests.
 - `tests/unit/logger.test.js` — logger tests.

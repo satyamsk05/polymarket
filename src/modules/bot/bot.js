@@ -140,6 +140,7 @@ import { createMarketDetailsFeature } from './features/market-details.js';
 import { createPositionsFeature } from './features/positions.js';
 import { createOrdersFeature } from './features/orders.js';
 import { createQuickBetFeature } from './features/quick-bet.js';
+import { createBracketOrderFeature } from './features/bracket-order.js';
 import { createTrendFeature } from './features/trend.js';
 import { createSecurityFeature } from './features/security.js';
 import { createSettingsFeature } from './features/settings.js';
@@ -475,6 +476,12 @@ const {
 });
 
 const {
+  handleLiveBracketOrder: handleLiveBracketOrderFeature
+} = createBracketOrderFeature({
+  ensureClientInitialized
+});
+
+const {
   showTrend: showTrendFeature
 } = createTrendFeature();
 
@@ -670,6 +677,7 @@ const handleTextMessage = createHandleTextMessageRouter({
   handleQuickBetAmount,
   handleQuickBetCoin,
   handleQuickBetExecute,
+  handleLiveBracketOrder: handleLiveBracketOrderFeature,
   handleSetAllowances,
   handleCollateralStatus,
   handleWrapAllUsdce,
