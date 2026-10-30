@@ -5,7 +5,9 @@ import {
   getOrder,
   cancelOrder,
   formatSharesFromBase,
-  formatUSDCFromBase
+  formatUSDCFromBase,
+  parseUSDCToBase,
+  getCollateralBalanceBase
 } from '../../polymarket.js';
 import { createContext, safeLogError, safeLogInfo } from '../../logger.js';
 import { busyLocks } from '../runtime.js';
@@ -212,6 +214,28 @@ export function createBracketOrderFeature(deps = {}) {
         return;
       }
 
+      // Pre-check USDC collateral balance
+      try {
+        const requiredUsdcBase = parseUSDCToBase(amount.toString());
+        const currentBalanceBase = await getCollateralBalanceBase();
+        if (typeof currentBalanceBase === 'bigint' && currentBalanceBase < requiredUsdcBase) {
+          const userBalance = formatUSDCFromBase(currentBalanceBase);
+          await ctx.reply(
+            `❌ <b>Insufficient Balance</b>\n\n` +
+            `Required: <b>$${amount.toFixed(2)} USDC</b>\n` +
+            `Available: <b>$${userBalance} USDC</b>\n\n` +
+            `Aapke bot wallet mein sufficient USDC balance nahi hai. Trading shuru karne ke liye pehle Polygon network par USDC deposit karein.`,
+            {
+              reply_markup: getPersistentBottomKeyboard(),
+              parse_mode: 'HTML'
+            }
+          );
+          return;
+        }
+      } catch (balErr) {
+        // Non-blocking if balance check fails, let exchange validate
+      }
+
       const targetTokenId = side === 'UP' ? liveRound.upTokenId : liveRound.downTokenId;
       const sideIcon = side === 'UP' ? '🟢' : '🔴';
 
@@ -233,9 +257,10 @@ export function createBracketOrderFeature(deps = {}) {
         orderType: 'GTC'
       });
 
-      const buyOrderId = buyResult?.orderID || buyResult?.id;
+      const buyOrderId = buyResult?.orderID || buyResult?.id || buyResult?.order_id;
       if (!buyOrderId) {
-        throw new Error('Failed to obtain order ID from CLOB.');
+        const detail = buyResult?.errorMsg || buyResult?.error || buyResult?.message;
+        throw new Error(detail || 'Order rejected by CLOB exchange (insufficient funds or collateral).');
       }
 
       const placedText =
@@ -291,8 +316,15 @@ export function createBracketOrderFeature(deps = {}) {
       safeLogError(ctxLog, err);
 
       let errorMsg = err?.message || 'Transaction failed';
-      if (errorMsg.includes('collateral') || errorMsg.includes('allowance')) {
-        errorMsg = 'Insufficient USDC collateral balance or allowance.';
+      const lower = errorMsg.toLowerCase();
+      if (
+        lower.includes('collateral') ||
+        lower.includes('allowance') ||
+        lower.includes('balance') ||
+        lower.includes('insufficient') ||
+        lower.includes('obtain order id')
+      ) {
+        errorMsg = 'Insufficient USDC balance in wallet. Please fund your bot wallet with USDC on Polygon to place orders.';
       }
 
       await ctx.reply(
