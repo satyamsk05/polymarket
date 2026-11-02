@@ -2874,11 +2874,10 @@ let collateralOnrampContract = null;
 let currentSigner = null;
 
 const DEFAULT_POLYGON_RPC_URLS = [
-  'https://1rpc.io/matic',
-  'https://polygon-rpc.com',
-  'https://polygon-public.nodies.app',
-  'https://rpc.ankr.com/polygon',
-  'https://polygon.llamarpc.com'
+  'https://polygon.drpc.org',
+  'https://polygon.gateway.tenderly.co',
+  'https://polygon-bor.publicnode.com',
+  'https://polygon.api.onfinality.io/public'
 ];
 
 const GWEI_UNIT = 'gwei';
