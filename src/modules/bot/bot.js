@@ -206,6 +206,11 @@ export async function initBot(token, allowedUserIdParam) {
   bot.command('trend', async (ctx) => {
     await showTrend(ctx);
   });
+
+  // /balance command
+  bot.command('balance', async (ctx) => {
+    await handleShowBalance(ctx);
+  });
   
   // Callback handlers
   bot.on('callback_query:data', async (ctx) => {
@@ -2595,8 +2600,9 @@ async function showTrend(ctx, coin = 'BTC', isEdit = false) {
 }
 
 async function handleShowBalance(ctx) {
+  const store = userContextStorage?.getStore?.();
   const config = await loadConfig();
-  const walletAddress = config.walletAddress;
+  const walletAddress = store?.walletAddress || config.walletAddress;
 
   if (!walletAddress) {
     return await ctx.reply('❌ No wallet configured.', {

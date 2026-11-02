@@ -178,7 +178,7 @@ export function createHandleTextMessageRouter(deps) {
       normalizeCtx(ctx);
       if (showTrend) return await showTrend(ctx);
     }
-    if (norm.includes('Balance')) {
+    if (norm.toLowerCase().includes('balance') || norm.toLowerCase() === '/balance' || norm.toLowerCase() === 'bal') {
       userStates.delete(chatId);
       normalizeCtx(ctx);
       if (handleShowBalance) return await handleShowBalance(ctx);
