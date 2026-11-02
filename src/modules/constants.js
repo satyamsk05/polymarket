@@ -14,6 +14,7 @@ export const NEG_RISK_CTF_EXCHANGE = '0xe2222d279d744050d28e00520010520000310F59
 export const NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
 export const NEG_RISK_WRAPPED_COLLATERAL_ADDRESS = '0x3A3BD7bb9528E159577F7C2e685CC81A765002E2';
 export const COLLATERAL_ONRAMP_ADDRESS = '0x93070a847efEf7F70739046A929D47a521F5B8ee';
+export const UNISWAP_V3_ROUTER_ADDRESS = '0xE592427A0AEce92De3Edee1F18E0157C05861564';
 
 // API endpoints
 export const GAMMA_API_URL = 'https://gamma-api.polymarket.com';
@@ -47,6 +48,10 @@ export const ERC20_ABI = [
 export const COLLATERAL_ONRAMP_ABI = [
   'function wrap(address _asset, address _to, uint256 _amount) external',
   'function COLLATERAL_TOKEN() external view returns (address)'
+];
+
+export const UNISWAP_V3_ROUTER_ABI = [
+  'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)'
 ];
 
 // Constants

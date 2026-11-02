@@ -189,7 +189,8 @@
 - Main onchain contracts:
   - pUSD ERC20 collateral (`PUSD_ADDRESS`; legacy alias `USDC_ADDRESS` still points here)
   - USDC.e collateral source asset (`USDCE_ADDRESS`)
-  - CollateralOnramp (`COLLATERAL_ONRAMP_ADDRESS`) for `wrap(address _asset, address _to, uint256 _amount)`
+  - CollateralOnramp (`COLLATERAL_ONRAMP_ADDRESS`) for `wrap(address _asset, address _to, uint256 _amount)` (USDC.e)
+  - Uniswap V3 SwapRouter (`UNISWAP_V3_ROUTER_ADDRESS`) for Native USDC to pUSD swap
   - CTF contract
   - CTF exchange
   - neg-risk exchange

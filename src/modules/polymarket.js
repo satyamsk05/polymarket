@@ -7,6 +7,7 @@ import {
   CLOB_API_URL,
   GAMMA_API_URL,
   DATA_API_URL,
+  PUSD_ADDRESS,
   USDC_ADDRESS,
   USDCE_ADDRESS,
   USDC_NATIVE_ADDRESS,
@@ -15,9 +16,11 @@ import {
   NEG_RISK_CTF_EXCHANGE,
   NEG_RISK_ADAPTER,
   COLLATERAL_ONRAMP_ADDRESS,
+  UNISWAP_V3_ROUTER_ADDRESS,
   CTF_ABI,
   ERC20_ABI,
   COLLATERAL_ONRAMP_ABI,
+  UNISWAP_V3_ROUTER_ABI,
   USDC_DECIMALS,
   PARENT_COLLECTION_ID,
   BINARY_PARTITION
@@ -3148,20 +3151,53 @@ export async function wrapUsdceToPusd(amountBase) {
     throw new Error('Insufficient Native USDC or USDC.e balance to wrap.');
   }
 
-  const onrampAllowance = await targetTokenContract.allowance(owner, COLLATERAL_ONRAMP_ADDRESS);
-  if (onrampAllowance.lt(amountBase)) {
-    await sendWithAdaptiveApprovalGas(
+  let receipt;
+  if (targetTokenAddress === USDC_NATIVE_ADDRESS) {
+    const routerAddress = UNISWAP_V3_ROUTER_ADDRESS;
+    const routerContract = new ethers.Contract(routerAddress, UNISWAP_V3_ROUTER_ABI, currentSigner);
+
+    const routerAllowance = await targetTokenContract.allowance(owner, routerAddress);
+    if (routerAllowance.lt(amountBase)) {
+      await sendWithAdaptiveApprovalGas(
+        'wrapUsdceToPusd',
+        async (overrides) => targetTokenContract.approve(routerAddress, ethers.constants.MaxUint256, overrides),
+        { type: 'Native USDC->UniswapRouter' }
+      );
+    }
+
+    const amountOutMinimum = (amountBase * 99n) / 100n;
+    const deadline = Math.floor(Date.now() / 1000) + 1200;
+
+    receipt = await sendWithAdaptiveApprovalGas(
       'wrapUsdceToPusd',
-      async (overrides) => targetTokenContract.approve(COLLATERAL_ONRAMP_ADDRESS, ethers.constants.MaxUint256, overrides),
-      { type: `${tokenSymbol}->CollateralOnramp` }
+      async (overrides) => routerContract.exactInputSingle({
+        tokenIn: USDC_NATIVE_ADDRESS,
+        tokenOut: PUSD_ADDRESS,
+        fee: 100,
+        recipient: owner,
+        deadline,
+        amountIn: amountBase,
+        amountOutMinimum,
+        sqrtPriceLimitX96: 0
+      }, overrides),
+      { type: 'UniswapV3.swap', token: tokenSymbol, amountBase: amountBase.toString() }
+    );
+  } else {
+    const onrampAllowance = await targetTokenContract.allowance(owner, COLLATERAL_ONRAMP_ADDRESS);
+    if (onrampAllowance.lt(amountBase)) {
+      await sendWithAdaptiveApprovalGas(
+        'wrapUsdceToPusd',
+        async (overrides) => targetTokenContract.approve(COLLATERAL_ONRAMP_ADDRESS, ethers.constants.MaxUint256, overrides),
+        { type: `${tokenSymbol}->CollateralOnramp` }
+      );
+    }
+
+    receipt = await sendWithAdaptiveApprovalGas(
+      'wrapUsdceToPusd',
+      async (overrides) => collateralOnrampContract.wrap(targetTokenAddress, owner, amountBase, overrides),
+      { type: 'CollateralOnramp.wrap', token: tokenSymbol, amountBase: amountBase.toString() }
     );
   }
-
-  const receipt = await sendWithAdaptiveApprovalGas(
-    'wrapUsdceToPusd',
-    async (overrides) => collateralOnrampContract.wrap(targetTokenAddress, owner, amountBase, overrides),
-    { type: 'CollateralOnramp.wrap', token: tokenSymbol, amountBase: amountBase.toString() }
-  );
 
   if (clobClient) {
     try {

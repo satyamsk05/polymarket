@@ -5,7 +5,8 @@ import {
   COLLATERAL_ONRAMP_ADDRESS,
   NEG_RISK_WRAPPED_COLLATERAL_ADDRESS,
   PUSD_ADDRESS,
-  USDCE_ADDRESS
+  USDCE_ADDRESS,
+  UNISWAP_V3_ROUTER_ADDRESS
 } from '../../src/modules/constants.js';
 import { mapErrorToUserMessage } from '../../src/modules/polymarket.js';
 
@@ -14,6 +15,7 @@ test('Polygon collateral constants match confirmed wrap-flow contracts', () => {
   assert.strictEqual(USDCE_ADDRESS, '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174');
   assert.strictEqual(COLLATERAL_ONRAMP_ADDRESS, '0x93070a847efEf7F70739046A929D47a521F5B8ee');
   assert.strictEqual(NEG_RISK_WRAPPED_COLLATERAL_ADDRESS, '0x3A3BD7bb9528E159577F7C2e685CC81A765002E2');
+  assert.strictEqual(UNISWAP_V3_ROUTER_ADDRESS, '0xE592427A0AEce92De3Edee1F18E0157C05861564');
 });
 
 test('mapErrorToUserMessage keeps wrap guidance for pUSD shortage errors', () => {
