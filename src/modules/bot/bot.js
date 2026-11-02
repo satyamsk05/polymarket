@@ -58,7 +58,8 @@ import {
   getActiveStrategies as getDbActiveStrategies
 } from '../database.js';
 import { getUserSession, userContextStorage, MAX_USERS } from '../userManager.js';
-import { Wallet } from 'ethers';
+import { ethers, Wallet } from 'ethers';
+import { USDC_NATIVE_ADDRESS, ERC20_ABI } from '../constants.js';
 import {
   RATE_LIMIT_MS,
   MIN_SPLIT_USDC_BASE,
@@ -2613,6 +2614,7 @@ async function handleShowBalance(ctx) {
   try {
     let pusdDisplay = '0.00';
     let usdceDisplay = '0.00';
+    let nativeUsdcDisplay = '0.00';
     let polDisplay = '0.0000';
 
     try {
@@ -2627,16 +2629,29 @@ async function handleShowBalance(ctx) {
       if (provider) {
         const polWei = await provider.getBalance(walletAddress);
         polDisplay = parseFloat(ethers.utils.formatEther(polWei)).toFixed(4);
+
+        try {
+          const nativeContract = new ethers.Contract(USDC_NATIVE_ADDRESS, ERC20_ABI, provider);
+          const nativeBal = await nativeContract.balanceOf(walletAddress);
+          nativeUsdcDisplay = formatUSDCFromBase(BigInt(nativeBal.toString()));
+        } catch {}
       }
     } catch {}
 
     let text = `💰 <b>Polymarket Account Balance</b>\n\n`;
-    text += `💵 <b>Trading Balance:</b> <code>$${pusdDisplay} USDC</code>\n`;
+    text += `💵 <b>Trading Balance (pUSD):</b> <code>$${pusdDisplay}</code>\n`;
     text += `⛽ <b>Gas (Polygon POL):</b> <code>${polDisplay} POL</code>\n`;
+    if (Number(nativeUsdcDisplay) > 0) {
+      text += `🪙 <b>Native USDC:</b> <code>$${nativeUsdcDisplay} USDC</code>\n`;
+    }
     if (Number(usdceDisplay) > 0) {
-      text += `🔄 <b>USDC.e (Unwrapped):</b> <code>$${usdceDisplay}</code>\n`;
+      text += `🔄 <b>USDC.e:</b> <code>$${usdceDisplay}</code>\n`;
     }
     text += `\n📬 <b>Wallet:</b> <code>${walletAddress}</code>`;
+
+    if (Number(nativeUsdcDisplay) > 0 && Number(pusdDisplay) === 0) {
+      text += `\n\n💡 <b>Note:</b> Aapka $${nativeUsdcDisplay} USDC wallet mein aa chuka hai! Polymarket CLOB exchange par trade karne ke liye isse pUSD mein wrap karna hoga (jiske liye ~0.5 POL gas fee zaroori hai).`;
+    }
 
     await ctx.reply(text, {
       reply_markup: getPersistentBottomKeyboard(),

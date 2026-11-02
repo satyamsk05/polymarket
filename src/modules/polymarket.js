@@ -9,6 +9,7 @@ import {
   DATA_API_URL,
   USDC_ADDRESS,
   USDCE_ADDRESS,
+  USDC_NATIVE_ADDRESS,
   CTF_ADDRESS,
   CTF_EXCHANGE_ADDRESS,
   NEG_RISK_CTF_EXCHANGE,
@@ -2006,6 +2007,7 @@ export async function getCollateralStatus() {
   const clobAllowance = safeToBigInt(data?.allowance);
   let onchainAllowances = null;
   let usdceBalance = 0n;
+  let nativeUsdcBalance = 0n;
   let onrampAllowance = 0n;
 
   if (currentSigner) {
@@ -2022,6 +2024,10 @@ export async function getCollateralStatus() {
         usdceBalance = safeToBigInt(walletUsdceBalance) ?? 0n;
         onrampAllowance = safeToBigInt(walletOnrampAllowance) ?? 0n;
       }
+      if (nativeUsdcContract) {
+        const walletNativeBalance = await nativeUsdcContract.balanceOf(owner);
+        nativeUsdcBalance = safeToBigInt(walletNativeBalance) ?? 0n;
+      }
     } catch {}
   }
 
@@ -2035,6 +2041,7 @@ export async function getCollateralStatus() {
   return {
     balance: balance !== null ? balance.toString() : '0',
     usdceBalance: usdceBalance.toString(),
+    nativeUsdcBalance: nativeUsdcBalance.toString(),
     allowance: fallbackAllowance,
     onrampAllowance: onrampAllowance.toString(),
     allowances: {
@@ -2860,6 +2867,7 @@ export async function checkBalance(address) {
 let provider = null;
 let usdcContract = null;
 let usdceContract = null;
+let nativeUsdcContract = null;
 let ctfContract = null;
 let negRiskAdapterContract = null;
 let collateralOnrampContract = null;
@@ -3093,15 +3101,16 @@ export async function initContracts(signer, rpcUrl) {
   currentSigner = connectedSigner;
   usdcContract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, connectedSigner);
   usdceContract = new ethers.Contract(USDCE_ADDRESS, ERC20_ABI, connectedSigner);
+  nativeUsdcContract = new ethers.Contract(USDC_NATIVE_ADDRESS, ERC20_ABI, connectedSigner);
   ctfContract = new ethers.Contract(CTF_ADDRESS, CTF_ABI, connectedSigner);
   negRiskAdapterContract = new ethers.Contract(NEG_RISK_ADAPTER, NEG_RISK_ADAPTER_ABI, connectedSigner);
   collateralOnrampContract = new ethers.Contract(COLLATERAL_ONRAMP_ADDRESS, COLLATERAL_ONRAMP_ABI, connectedSigner);
   
-  return { provider, usdcContract, usdceContract, ctfContract, negRiskAdapterContract, collateralOnrampContract };
+  return { provider, usdcContract, usdceContract, nativeUsdcContract, ctfContract, negRiskAdapterContract, collateralOnrampContract };
 }
 
 export async function wrapUsdceToPusd(amountBase) {
-  if (!currentSigner || !usdceContract || !collateralOnrampContract) {
+  if (!currentSigner || !collateralOnrampContract) {
     throw new Error('Contracts not initialized. Call initContracts() first.');
   }
 
@@ -3110,24 +3119,47 @@ export async function wrapUsdceToPusd(amountBase) {
   }
 
   const owner = await getSignerAddress(currentSigner);
-  const usdceBalance = await usdceContract.balanceOf(owner);
-  if (usdceBalance.lt(amountBase)) {
-    throw new Error(`Insufficient USDC.e balance. Available: ${formatUSDCFromBase(usdceBalance)} USDC.e`);
+
+  // Check which token has the balance: Native USDC or USDC.e
+  let targetTokenContract = null;
+  let targetTokenAddress = null;
+  let tokenSymbol = 'USDC';
+
+  if (nativeUsdcContract) {
+    const bal = await nativeUsdcContract.balanceOf(owner);
+    if (bal.gte(amountBase)) {
+      targetTokenContract = nativeUsdcContract;
+      targetTokenAddress = USDC_NATIVE_ADDRESS;
+      tokenSymbol = 'Native USDC';
+    }
   }
 
-  const onrampAllowance = await usdceContract.allowance(owner, COLLATERAL_ONRAMP_ADDRESS);
+  if (!targetTokenContract && usdceContract) {
+    const bal = await usdceContract.balanceOf(owner);
+    if (bal.gte(amountBase)) {
+      targetTokenContract = usdceContract;
+      targetTokenAddress = USDCE_ADDRESS;
+      tokenSymbol = 'USDC.e';
+    }
+  }
+
+  if (!targetTokenContract) {
+    throw new Error('Insufficient Native USDC or USDC.e balance to wrap.');
+  }
+
+  const onrampAllowance = await targetTokenContract.allowance(owner, COLLATERAL_ONRAMP_ADDRESS);
   if (onrampAllowance.lt(amountBase)) {
     await sendWithAdaptiveApprovalGas(
       'wrapUsdceToPusd',
-      async (overrides) => usdceContract.approve(COLLATERAL_ONRAMP_ADDRESS, ethers.constants.MaxUint256, overrides),
-      { type: 'USDC.e->CollateralOnramp' }
+      async (overrides) => targetTokenContract.approve(COLLATERAL_ONRAMP_ADDRESS, ethers.constants.MaxUint256, overrides),
+      { type: `${tokenSymbol}->CollateralOnramp` }
     );
   }
 
   const receipt = await sendWithAdaptiveApprovalGas(
     'wrapUsdceToPusd',
-    async (overrides) => collateralOnrampContract.wrap(USDCE_ADDRESS, owner, amountBase, overrides),
-    { type: 'CollateralOnramp.wrap', amountBase: amountBase.toString() }
+    async (overrides) => collateralOnrampContract.wrap(targetTokenAddress, owner, amountBase, overrides),
+    { type: 'CollateralOnramp.wrap', token: tokenSymbol, amountBase: amountBase.toString() }
   );
 
   if (clobClient) {

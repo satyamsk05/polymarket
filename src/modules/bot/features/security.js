@@ -337,8 +337,8 @@ export function createSecurityFeature(deps) {
       await initContracts(signer, getPolygonRpcUrl());
       await ensureClientInitialized();
 
-      const { usdceBalance } = await getCollateralStatus();
-      const amountBase = BigInt(usdceBalance || '0');
+      const { usdceBalance, nativeUsdcBalance } = await getCollateralStatus();
+      const amountBase = BigInt(nativeUsdcBalance && BigInt(nativeUsdcBalance) > 0n ? nativeUsdcBalance : (usdceBalance || '0'));
       if (amountBase <= 0n) {
         await ctx.reply(t('collateral_wrap_unavailable'), {
           reply_markup: getSettingsBottomKeyboard()
