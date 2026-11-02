@@ -1,5 +1,5 @@
 import { InlineKeyboard } from 'grammy';
-import { Wallet } from 'ethers';
+import { ethers, Wallet } from 'ethers';
 import { loadConfig, getPolygonRpcUrl } from '../../config.js';
 import { getTranslator } from '../../i18n.js';
 import { getDecryptedPrivateKey, getDecryptedL2Credentials, initializeWallet } from '../../auth.js';
@@ -190,6 +190,30 @@ export function createSecurityFeature(deps) {
       // Initialize contracts
       const privateKey = await getDecryptedPrivateKey();
       const signer = new Wallet(privateKey);
+      await initContracts(signer, getPolygonRpcUrl());
+
+      // Pre-check POL gas fee balance
+      try {
+        const provider = signer.provider;
+        if (provider) {
+          const polWei = await provider.getBalance(signer.address);
+          if (polWei.isZero() || polWei.lt(ethers.utils.parseEther('0.005'))) {
+            await ctx.reply(
+              `❌ <b>Insufficient POL for Gas Fee</b>\n\n` +
+              `Allowances set karne ke liye Polygon blockchain par smart contract transactions bhejne hote hain.\n` +
+              `Aapke wallet mein abhi <b>0.00 POL</b> hai.\n\n` +
+              `👉 Kripya apne wallet address (<code>${signer.address}</code>) par <b>0.5 ya 1 POL</b> transfer karein taaki gas fees pay ho sake.`,
+              {
+                reply_markup: getSettingsBottomKeyboard(),
+                parse_mode: 'HTML'
+              }
+            );
+            return;
+          }
+        }
+      } catch (gasErr) {
+        // Non-blocking if gas check fails, proceed to attempt allowances
+      }
 
       const results = await setAllAllowances(signer);
       if (config.walletAddress) {
@@ -222,8 +246,20 @@ export function createSecurityFeature(deps) {
     } catch (error) {
       const ctxLog = createContext('bot', 'handleSetAllowances');
       safeLogError(ctxLog, error);
-      await ctx.reply(t('error_generic'), {
-        reply_markup: getSettingsBottomKeyboard()
+
+      let errMessage = t('error_generic');
+      const lower = String(error?.message || '').toLowerCase();
+      if (
+        error?.code === 'INSUFFICIENT_FUNDS' ||
+        lower.includes('insufficient funds') ||
+        lower.includes('intrinsic transaction cost')
+      ) {
+        errMessage = `❌ <b>Insufficient POL for Gas Fee</b>\n\nAllowances approve karne ke liye Polygon network par POL gas fee lagti hai. Kripya pehle apne bot wallet mein 0.5 se 1 POL deposit karein.`;
+      }
+
+      await ctx.reply(errMessage, {
+        reply_markup: getSettingsBottomKeyboard(),
+        parse_mode: 'HTML'
       });
     } finally {
       busyLocks.delete(chatId);
