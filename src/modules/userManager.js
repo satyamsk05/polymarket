@@ -27,40 +27,41 @@ const userSessions = new Map();
 // Helper to seed owner from config.json if not already in users table
 async function seedOwnerIfNeeded(tId) {
   try {
-    const existing = getUserByTelegramId(tId);
-    if (existing) return;
-
     const allowedOwnerId = process.env.TELEGRAM_ALLOWED_USER_ID;
     if (!allowedOwnerId || String(allowedOwnerId) !== String(tId)) return;
 
+    const existing = getUserByTelegramId(tId);
     const config = await loadConfig();
     if (config.walletAddress && config.encrypted?.privateKey) {
       const machineKey = await getMachineKey();
       let encryptedCredsStr = '';
       if (config.encrypted?.l2Credentials) {
         try {
-          const l2Creds = {
-            apiKey: config.encrypted.l2Credentials.apiKey || config.encrypted.l2Credentials.key,
-            secret: config.encrypted.l2Credentials.secret,
-            passphrase: config.encrypted.l2Credentials.passphrase
-          };
+          const enc = config.encrypted.l2Credentials;
+          const encKey = enc.apiKey || enc.key;
+          const apiKey = encKey ? await decrypt(encKey, machineKey) : '';
+          const secret = enc.secret ? await decrypt(enc.secret, machineKey) : '';
+          const passphrase = enc.passphrase ? await decrypt(enc.passphrase, machineKey) : '';
+          const l2Creds = { apiKey, secret, passphrase };
           encryptedCredsStr = await encrypt(JSON.stringify(l2Creds), machineKey);
         } catch {}
       }
 
-      createUserRecord({
-        telegramId: String(tId),
-        walletAddress: config.walletAddress,
-        encryptedPk: config.encrypted.privateKey,
-        encryptedCreds: encryptedCredsStr,
-        language: config.language || 'en'
-      });
+      if (!existing || !existing.encrypted_creds) {
+        createUserRecord({
+          telegramId: String(tId),
+          walletAddress: config.walletAddress,
+          encryptedPk: config.encrypted.privateKey,
+          encryptedCreds: encryptedCredsStr,
+          language: config.language || 'en'
+        });
 
-      const ctxLog = createContext('userManager', 'seedOwner');
-      safeLogInfo(ctxLog, 'Seeded existing owner wallet into multi-user DB', {
-        telegramId: String(tId),
-        walletAddress: config.walletAddress
-      });
+        const ctxLog = createContext('userManager', 'seedOwner');
+        safeLogInfo(ctxLog, 'Seeded existing owner wallet into multi-user DB', {
+          telegramId: String(tId),
+          walletAddress: config.walletAddress
+        });
+      }
     }
   } catch (err) {
     const ctxLog = createContext('userManager', 'seedOwnerError');
@@ -90,6 +91,22 @@ export async function getUserSession(telegramId) {
       try {
         const decryptedJson = await decrypt(userRow.encrypted_creds, machineKey);
         creds = JSON.parse(decryptedJson);
+      } catch {}
+    }
+
+    if (creds && typeof creds.apiKey === 'string' && creds.apiKey.startsWith('v2:')) {
+      try {
+        creds.apiKey = await decrypt(creds.apiKey, machineKey);
+        creds.secret = await decrypt(creds.secret, machineKey);
+        creds.passphrase = await decrypt(creds.passphrase, machineKey);
+        const reEncrypted = await encrypt(JSON.stringify(creds), machineKey);
+        createUserRecord({
+          telegramId: tId,
+          walletAddress: userRow.wallet_address,
+          encryptedPk: userRow.encrypted_pk,
+          encryptedCreds: reEncrypted,
+          language: userRow.language || 'en'
+        });
       } catch {}
     }
 

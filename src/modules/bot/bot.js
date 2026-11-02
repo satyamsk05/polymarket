@@ -59,7 +59,7 @@ import {
 } from '../database.js';
 import { getUserSession, userContextStorage, MAX_USERS } from '../userManager.js';
 import { ethers, Wallet } from 'ethers';
-import { USDC_NATIVE_ADDRESS, ERC20_ABI } from '../constants.js';
+import { USDC_NATIVE_ADDRESS, PUSD_ADDRESS, ERC20_ABI } from '../constants.js';
 import {
   RATE_LIMIT_MS,
   MIN_SPLIT_USDC_BASE,
@@ -2622,13 +2622,25 @@ async function handleShowBalance(ctx) {
       const { balance, usdceBalance } = await getCollateralStatus();
       pusdDisplay = formatUSDCFromBase(BigInt(balance || '0'));
       usdceDisplay = formatUSDCFromBase(BigInt(usdceBalance || '0'));
-    } catch {}
+    } catch (err) {
+      const ctxLog = createContext('bot', 'handleShowBalance:getCollateralStatus');
+      safeLogWarn(ctxLog, 'CLOB collateral status unavailable, falling back to on-chain', { error: err?.message });
+    }
 
     try {
       const provider = await getOnchainReadProvider();
       if (provider) {
         const polWei = await provider.getBalance(walletAddress);
         polDisplay = parseFloat(ethers.utils.formatEther(polWei)).toFixed(4);
+
+        try {
+          const pusdContract = new ethers.Contract(PUSD_ADDRESS, ERC20_ABI, provider);
+          const pusdBal = await pusdContract.balanceOf(walletAddress);
+          const onchainPusd = formatUSDCFromBase(BigInt(pusdBal.toString()));
+          if (Number(pusdDisplay) === 0 && Number(onchainPusd) > 0) {
+            pusdDisplay = onchainPusd;
+          }
+        } catch {}
 
         try {
           const nativeContract = new ethers.Contract(USDC_NATIVE_ADDRESS, ERC20_ABI, provider);
