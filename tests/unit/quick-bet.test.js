@@ -102,7 +102,7 @@ test('getSettingsBottomKeyboard creates clean settings bottom keyboard without i
   assert.match(json, /Redeem Winnings/);
   assert.match(json, /Set Allowances/);
   assert.match(json, /Collateral Status/);
-  assert.match(json, /Wrap USDC\.e/);
+  assert.match(json, /Wrap USDC/);
   assert.match(json, /Withdraw Funds/);
   assert.match(json, /Export Private Key/);
   assert.match(json, /Back to Menu/);

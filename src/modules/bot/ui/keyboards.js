@@ -56,7 +56,7 @@ export function getSettingsBottomKeyboard() {
     .text('🔑 Set Allowances')
     .text('💵 Collateral Status')
     .row()
-    .text('🔄 Wrap USDC.e')
+    .text('🔄 Wrap USDC to pUSD')
     .text('📤 Withdraw Funds')
     .row()
     .text('🔐 Export Private Key')

@@ -133,7 +133,7 @@ export function createHandleTextMessageRouter(deps) {
       normalizeCtx(ctx);
       if (handleCollateralStatus) return await handleCollateralStatus(ctx);
     }
-    if (norm.includes('Wrap USDC.e')) {
+    if (norm.includes('Wrap') || norm.toLowerCase().includes('wrap')) {
       userStates.delete(chatId);
       normalizeCtx(ctx);
       if (handleWrapAllUsdce) return await handleWrapAllUsdce(ctx);

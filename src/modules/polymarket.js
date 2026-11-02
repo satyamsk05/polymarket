@@ -2874,9 +2874,9 @@ let collateralOnrampContract = null;
 let currentSigner = null;
 
 const DEFAULT_POLYGON_RPC_URLS = [
+  'https://1rpc.io/matic',
   'https://polygon-rpc.com',
   'https://polygon-public.nodies.app',
-  'https://1rpc.io/matic',
   'https://rpc.ankr.com/polygon',
   'https://polygon.llamarpc.com'
 ];
